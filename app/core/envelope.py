@@ -1,7 +1,9 @@
 """Foundation types for envelope-related message metadata."""
 
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from enum import StrEnum
+from hashlib import sha256
 
 
 class InputType(StrEnum):
@@ -40,6 +42,19 @@ class LogEventType(StrEnum):
     AGENT_PROMPT_CREATED = "agent_prompt_created"
     RESPONSE_SENT = "response_sent"
     ERROR = "error"
+
+
+def make_session_id(channel_user_id: str, channel: str) -> str:
+    """Returns a daily rotating pseudonymous session identifier."""
+
+    return _make_session_id_for_date(channel_user_id, channel, datetime.now(timezone.utc).date())
+
+
+def _make_session_id_for_date(channel_user_id: str, channel: str, day: date) -> str:
+    """Returns the SHA-256 hex digest for a user/channel/day tuple."""
+
+    payload = "\0".join((channel, day.isoformat(), channel_user_id))
+    return sha256(payload.encode("utf-8")).hexdigest()
 
 
 @dataclass(slots=True)

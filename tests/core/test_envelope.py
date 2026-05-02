@@ -1,4 +1,6 @@
 from dataclasses import fields
+from datetime import date
+import re
 
 import pytest
 
@@ -8,6 +10,7 @@ from app.core.envelope import (
     LocationSource,
     LogEventType,
     SubmissionType,
+    _make_session_id_for_date,
 )
 
 
@@ -39,6 +42,44 @@ def test_log_event_type_values_are_lowercase_strings() -> None:
     assert LogEventType.AGENT_PROMPT_CREATED == "agent_prompt_created"
     assert LogEventType.RESPONSE_SENT == "response_sent"
     assert LogEventType.ERROR == "error"
+
+
+def test_session_id_is_consistent_within_a_day() -> None:
+    day = date(2026, 5, 2)
+
+    first = _make_session_id_for_date("user-123", "sms", day)
+    second = _make_session_id_for_date("user-123", "sms", day)
+
+    assert first == second
+
+
+def test_session_id_rotates_daily() -> None:
+    first = _make_session_id_for_date("user-123", "sms", date(2026, 5, 2))
+    second = _make_session_id_for_date("user-123", "sms", date(2026, 5, 3))
+
+    assert first != second
+
+
+def test_session_id_differs_by_channel() -> None:
+    sms = _make_session_id_for_date("user-123", "sms", date(2026, 5, 2))
+    whatsapp = _make_session_id_for_date("user-123", "whatsapp", date(2026, 5, 2))
+
+    assert sms != whatsapp
+
+
+def test_session_id_is_sha256_hex_digest() -> None:
+    session_id = _make_session_id_for_date("user-123", "sms", date(2026, 5, 2))
+
+    assert len(session_id) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", session_id)
+
+
+def test_session_id_does_not_include_raw_user_id() -> None:
+    raw_user_id = "user-123"
+
+    session_id = _make_session_id_for_date(raw_user_id, "sms", date(2026, 5, 2))
+
+    assert raw_user_id not in session_id
 
 
 def test_location_context_defaults() -> None:
