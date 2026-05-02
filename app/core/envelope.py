@@ -46,7 +46,7 @@ class LogEventType(StrEnum):
     RESPONSE_SENT = "response_sent"
     ERROR = "error"
 
-
+# hardcode these fields from being shared to agent
 _AGENT_PROMPT_FORBIDDEN_KEYS = {
     "channel",
     "channel_user_id",
