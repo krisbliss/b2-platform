@@ -7,6 +7,7 @@ import pytest
 from app.core.envelope import (
     CanonicalMessage,
     InputType,
+    LogEvent,
     LocationContext,
     LocationSource,
     LogEventType,
@@ -272,3 +273,86 @@ def test_agent_prompt_does_not_mutate_original_message() -> None:
     prompt["session_context"]["eligible_programs"].append("food")
 
     assert message.session_context == {"eligible_programs": ["housing"]}
+
+
+def test_log_event_default_values() -> None:
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+
+    assert event.cleartext_payload == {}
+    assert event.pii_envelope is None
+    assert event.agent_version is None
+    assert event.platform_version == "0.1.0"
+    assert event.schema_version == "1.0"
+
+
+def test_log_event_timestamp_is_timezone_aware() -> None:
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+
+    assert event.timestamp.tzinfo is not None
+    assert event.timestamp.utcoffset() is not None
+    assert datetime.now(event.timestamp.tzinfo).utcoffset() == event.timestamp.utcoffset()
+
+
+@pytest.mark.parametrize("pii_envelope", [b"opaque-bytes", None])
+def test_log_event_pii_envelope_can_be_bytes_or_none(pii_envelope: bytes | None) -> None:
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+        pii_envelope=pii_envelope,
+    )
+
+    assert event.pii_envelope == pii_envelope
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "phone",
+        "phone_number",
+        "raw_phone",
+        "name",
+        "full_name",
+        "lat",
+        "lng",
+        "latitude",
+        "longitude",
+        "coordinates",
+        "gps",
+        "raw_location",
+    ],
+)
+def test_log_event_forbidden_cleartext_payload_keys_raise_value_error(key: str) -> None:
+    with pytest.raises(ValueError, match="cleartext_payload contains forbidden PII keys"):
+        LogEvent(
+            event_type=LogEventType.MESSAGE_RECEIVED,
+            session_id_hash="session-hash",
+            cleartext_payload={"nested": {key: "unsafe"}},
+        )
+
+
+def test_log_event_safe_cleartext_payload_is_accepted() -> None:
+    event = LogEvent(
+        event_type=LogEventType.AGENT_PROMPT_CREATED,
+        session_id_hash="session-hash",
+        cleartext_payload={
+            "input_type": InputType.TEXT,
+            "submission_type": SubmissionType.INTAKE,
+            "location_context": {
+                "country_code": "US",
+                "region": "CA",
+                "city": "Oakland",
+                "source": LocationSource.PROMPT,
+                "confidence": 0.8,
+            },
+        },
+        pii_envelope=b"encrypted-user-data",
+    )
+
+    assert event.cleartext_payload["input_type"] == InputType.TEXT
+    assert event.pii_envelope == b"encrypted-user-data"
