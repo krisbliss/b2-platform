@@ -1,10 +1,11 @@
 from dataclasses import fields
-from datetime import date
+from datetime import date, datetime
 import re
 
 import pytest
 
 from app.core.envelope import (
+    CanonicalMessage,
     InputType,
     LocationContext,
     LocationSource,
@@ -129,3 +130,35 @@ def test_location_context_safe_dict_excludes_coordinate_keys() -> None:
     }
     forbidden = {"lat", "lng", "latitude", "longitude", "coordinates", "gps", "raw_location"}
     assert set(payload).isdisjoint(forbidden)
+
+
+def test_canonical_message_defaults_to_unknown_submission_type() -> None:
+    message = CanonicalMessage(session_id="session-123", channel="sms", input_type=InputType.TEXT)
+
+    assert message.submission_type is SubmissionType.UNKNOWN
+
+
+def test_canonical_message_session_context_does_not_share_mutable_state() -> None:
+    first = CanonicalMessage(session_id="session-1", channel="sms", input_type=InputType.TEXT)
+    second = CanonicalMessage(session_id="session-2", channel="sms", input_type=InputType.TEXT)
+
+    first.session_context["key"] = "value"
+
+    assert second.session_context == {}
+
+
+def test_canonical_message_prior_context_does_not_share_mutable_state() -> None:
+    first = CanonicalMessage(session_id="session-1", channel="sms", input_type=InputType.TEXT)
+    second = CanonicalMessage(session_id="session-2", channel="sms", input_type=InputType.TEXT)
+
+    first.prior_context.append({"role": "user"})
+
+    assert second.prior_context == []
+
+
+def test_canonical_message_timestamp_is_timezone_aware() -> None:
+    message = CanonicalMessage(session_id="session-123", channel="sms", input_type=InputType.TEXT)
+
+    assert message.timestamp.tzinfo is not None
+    assert message.timestamp.utcoffset() is not None
+    assert datetime.now(message.timestamp.tzinfo).utcoffset() == message.timestamp.utcoffset()

@@ -1,9 +1,10 @@
 """Foundation types for envelope-related message metadata."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from enum import StrEnum
 from hashlib import sha256
+from typing import Any
 
 
 class InputType(StrEnum):
@@ -83,3 +84,20 @@ class LocationContext:
             "source": self.source,
             "confidence": self.confidence,
         }
+
+
+@dataclass(slots=True)
+class CanonicalMessage:
+    """Normalized message envelope shared across channel-specific adapters."""
+
+    session_id: str
+    channel: str
+    input_type: InputType
+    text_content: str | None = None
+    media_url: str | None = None
+    language_hint: str | None = None
+    location_context: LocationContext | None = None
+    session_context: dict[str, Any] = field(default_factory=dict)
+    submission_type: SubmissionType = SubmissionType.UNKNOWN
+    prior_context: list[dict[str, Any]] = field(default_factory=list)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
