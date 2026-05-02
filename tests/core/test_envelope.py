@@ -162,3 +162,113 @@ def test_canonical_message_timestamp_is_timezone_aware() -> None:
     assert message.timestamp.tzinfo is not None
     assert message.timestamp.utcoffset() is not None
     assert datetime.now(message.timestamp.tzinfo).utcoffset() == message.timestamp.utcoffset()
+
+
+def test_agent_prompt_includes_text_content_for_text_messages() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        text_content="I need help with an application.",
+    )
+
+    prompt = message.to_agent_prompt()
+
+    assert prompt["text_content"] == "I need help with an application."
+
+
+def test_agent_prompt_excludes_session_id() -> None:
+    message = CanonicalMessage(session_id="session-123", channel="sms", input_type=InputType.TEXT)
+
+    prompt = message.to_agent_prompt()
+
+    assert "session_id" not in prompt
+
+
+def test_agent_prompt_excludes_channel() -> None:
+    message = CanonicalMessage(session_id="session-123", channel="sms", input_type=InputType.TEXT)
+
+    prompt = message.to_agent_prompt()
+
+    assert "channel" not in prompt
+
+
+def test_agent_prompt_excludes_media_url() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.IMAGE,
+        media_url="https://example.test/image.jpg",
+    )
+
+    prompt = message.to_agent_prompt()
+
+    assert "media_url" not in prompt
+
+
+def test_agent_prompt_includes_safe_location_fields_when_location_context_exists() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        location_context=LocationContext(
+            country_code="US",
+            region="CA",
+            city="Oakland",
+            source=LocationSource.PROMPT,
+            confidence=0.8,
+        ),
+    )
+
+    prompt = message.to_agent_prompt()
+
+    assert prompt["location_context"] == {
+        "country_code": "US",
+        "region": "CA",
+        "city": "Oakland",
+        "source": LocationSource.PROMPT,
+        "confidence": 0.8,
+    }
+
+
+def test_agent_prompt_excludes_coordinate_like_keys() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        location_context=LocationContext(
+            country_code="US",
+            source=LocationSource.PROMPT,
+            confidence=0.9,
+        ),
+        session_context={"lat": 37.8, "safe": "value"},
+    )
+
+    prompt = message.to_agent_prompt()
+    forbidden = {"coordinates", "latitude", "longitude", "lat", "lng", "gps"}
+
+    assert set(prompt).isdisjoint(forbidden)
+    assert set(prompt["location_context"]).isdisjoint(forbidden)
+    assert "session_context" not in prompt
+
+
+def test_agent_prompt_handles_missing_location_context_cleanly() -> None:
+    message = CanonicalMessage(session_id="session-123", channel="sms", input_type=InputType.TEXT)
+
+    prompt = message.to_agent_prompt()
+
+    assert "location_context" not in prompt
+
+
+def test_agent_prompt_does_not_mutate_original_message() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        session_context={"eligible_programs": ["housing"]},
+    )
+
+    prompt = message.to_agent_prompt()
+    prompt["session_context"]["eligible_programs"].append("food")
+
+    assert message.session_context == {"eligible_programs": ["housing"]}
