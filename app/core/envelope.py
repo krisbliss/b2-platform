@@ -64,6 +64,20 @@ _AGENT_PROMPT_FORBIDDEN_KEYS = {
     "session_id",
 }
 _PHONE_NUMBER_PATTERN = re.compile(r"\+?\d[\d\s().-]{7,}\d")
+_LOG_EVENT_FORBIDDEN_CLEARTEXT_KEYS = {
+    "coordinates",
+    "full_name",
+    "gps",
+    "lat",
+    "latitude",
+    "lng",
+    "longitude",
+    "name",
+    "phone",
+    "phone_number",
+    "raw_location",
+    "raw_phone",
+}
 
 
 def make_session_id(channel_user_id: str, channel: str) -> str:
@@ -166,3 +180,43 @@ def _contains_phone_number(value: str) -> bool:
         len(re.sub(r"\D", "", match.group(0))) >= 10
         for match in _PHONE_NUMBER_PATTERN.finditer(value)
     )
+
+
+@dataclass(slots=True)
+class LogEvent:
+    """Structured lifecycle event with cleartext metadata and opaque PII storage."""
+
+    event_type: LogEventType
+    session_id_hash: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    cleartext_payload: dict[str, Any] = field(default_factory=dict)
+    pii_envelope: bytes | None = None
+    agent_version: str | None = None
+    platform_version: str = "0.1.0"
+    schema_version: str = "1.0"
+
+    def __post_init__(self) -> None:
+        forbidden_keys = _find_forbidden_cleartext_keys(self.cleartext_payload)
+        if forbidden_keys:
+            keys = ", ".join(sorted(forbidden_keys))
+            msg = f"cleartext_payload contains forbidden PII keys: {keys}"
+            raise ValueError(msg)
+
+
+def _find_forbidden_cleartext_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        found: set[str] = set()
+        for key, child in value.items():
+            normalized_key = str(key).lower()
+            if normalized_key in _LOG_EVENT_FORBIDDEN_CLEARTEXT_KEYS:
+                found.add(normalized_key)
+            found.update(_find_forbidden_cleartext_keys(child))
+        return found
+
+    if isinstance(value, list | tuple):
+        found = set()
+        for item in value:
+            found.update(_find_forbidden_cleartext_keys(item))
+        return found
+
+    return set()
