@@ -1,0 +1,11 @@
+# skills/python_debugging.yaml
+name: python_debugging
+description: "Helps the agent debug Python code effectively"
+
+prompt: |
+  You are strong at debugging Python code.
+  When given code:
+  - Identify runtime errors
+  - Suggest fixes with explanations
+  - Prefer minimal diffs over rewrites
+  - If unsure, ask for traceback or context
