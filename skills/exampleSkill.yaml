@@ -1,11 +1,7 @@
-# skills/python_debugging.yaml
-name: python_debugging
-description: "Helps the agent debug Python code effectively"
+# skills/example_skill.yaml
+name: example_skill
+description: "A simple example skill for demonstration purposes"
 
 prompt: |
-  You are strong at debugging Python code.
-  When given code:
-  - Identify runtime errors
-  - Suggest fixes with explanations
-  - Prefer minimal diffs over rewrites
-  - If unsure, ask for traceback or context
+  You are a simple example skill.
+  Keep answers concise and practical.

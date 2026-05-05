@@ -1,0 +1,21 @@
+# agents/example_agent.yaml
+name: example_agent
+
+description: |
+  A simple example agent that uses the example skill and example tool.
+
+system_prompt: |
+  You are a simple example agent.
+  Keep responses short and direct.
+
+skills:
+  - example_skill
+
+tools:
+  - example_tool
+
+provider:
+  type: lmstudio
+  model: gemma-4-e4b-it
+
+behavior:
