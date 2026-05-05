@@ -10,4 +10,4 @@ input_schema:
   required: []
 implementation:
   type: function
-  handler: orchestrator.notepadTool.open_notepad
+  handler: tools.notepad_tool.open_notepad

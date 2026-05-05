@@ -10,4 +10,4 @@ input_schema:
   required: []
 implementation:
   type: function
-  handler: orchestrator.example_tool.handle
+  handler: tools.example_tool.handle

@@ -15,27 +15,36 @@ def open_notepad(filename: Optional[str] = None) -> str:
         A message indicating the notepad was opened.
     """
     try:
+        if filename:
+            file_path = os.path.abspath(filename)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            if not os.path.exists(file_path):
+                with open(file_path, "a", encoding="utf-8"):
+                    pass
+        else:
+            file_path = None
+
         if sys.platform == "darwin":
             # macOS: use TextEdit
-            if filename:
-                subprocess.Popen(["open", "-a", "TextEdit", filename])
-                return f"Opened TextEdit with file: {filename}"
+            if file_path:
+                subprocess.Popen(["open", "-a", "TextEdit", file_path])
+                return f"Opened TextEdit with file: {file_path}"
             else:
                 subprocess.Popen(["open", "-a", "TextEdit"])
                 return "Opened TextEdit"
         elif sys.platform == "win32":
             # Windows: use notepad.exe
-            if filename:
-                subprocess.Popen(["notepad.exe", filename])
-                return f"Opened notepad with file: {filename}"
+            if file_path:
+                subprocess.Popen(["notepad.exe", file_path])
+                return f"Opened notepad with file: {file_path}"
             else:
                 subprocess.Popen(["notepad.exe"])
                 return "Opened notepad"
         else:
             # Linux: try gedit or nano
-            if filename:
-                subprocess.Popen(["gedit", filename])
-                return f"Opened text editor with file: {filename}"
+            if file_path:
+                subprocess.Popen(["gedit", file_path])
+                return f"Opened text editor with file: {file_path}"
             else:
                 subprocess.Popen(["gedit"])
                 return "Opened text editor"

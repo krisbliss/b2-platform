@@ -3,6 +3,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 import importlib
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -51,6 +53,11 @@ class LLMProvider(ABC):
         if not handler_path:
             return "Tool handler not configured."
         module_path, function_name = handler_path.rsplit(".", 1)
+        project_root = Path(__file__).parent.parent.parent
+        project_root_str = str(project_root)
+        if project_root_str not in sys.path:
+            # Tool handlers can live in the repo-root tools/ package.
+            sys.path.insert(0, project_root_str)
         module = importlib.import_module(module_path)
         handler = getattr(module, function_name)
         return handler(**arguments)
