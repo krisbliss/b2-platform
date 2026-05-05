@@ -15,7 +15,7 @@ tools:
   - example_tool
 
 provider:
-  type: lmstudio
-  model: gemma-4-e4b-it
+  type: gemini
+  model: gemini-3-flash-preview
 
 behavior:

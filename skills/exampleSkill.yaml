@@ -3,5 +3,4 @@ name: example_skill
 description: "A simple example skill for demonstration purposes"
 
 prompt: |
-  You are a simple example skill.
   Keep answers concise and practical.
