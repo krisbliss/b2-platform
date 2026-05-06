@@ -1,8 +1,8 @@
-from typing import List, Optional
+from typing import Optional
 from . import skills
 
 
-def add_skills_to_prompt(prompt: str, skill_names: List[str], skills_dir: Optional[str] = None) -> str:
+def add_skills_to_prompt(prompt: str, skill_names: list[str], skills_dir: Optional[str] = None) -> str:
     """
     Add skills to a prompt by retrieving their prompts and appending them.
     

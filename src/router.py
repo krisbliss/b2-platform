@@ -143,7 +143,7 @@ class AgentRouter:
 			)
 
 		load_start = perf_counter()
-		agent = agent_module.Agent.from_yaml(record.yaml_path)
+		agent = agent_module.Agent(record.yaml_path)
 		logger.info("router.route agent load elapsed=%.3fs name=%s", perf_counter() - load_start, record.name)
 		logger.info("router.route done elapsed=%.3fs score=%.3f", perf_counter() - start, score)
 
@@ -153,14 +153,3 @@ class AgentRouter:
 			"yaml_path": record.yaml_path,
 			"score": score,
 		}
-
-
-def route_agent(
-	query: str,
-	agents_dir: Optional[str] = None,
-	db_path: Optional[str] = None,
-	min_score: float = 0.5,
-) -> agent_module.Agent:
-	"""Convenience function for routing a query to the best agent."""
-	router = AgentRouter(agents_dir=agents_dir, db_path=db_path, min_score=min_score)
-	return router.route(query)

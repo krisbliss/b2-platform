@@ -1,35 +1,17 @@
-import os
 import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 
 class ToolDefinition:
     """Represents a tool definition loaded from YAML."""
     
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         self.name = data.get("name")
         self.description = data.get("description")
         self.input_schema = data.get("input_schema", {})
         self.implementation = data.get("implementation", {})
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert tool definition to dictionary."""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "input_schema": self.input_schema,
-            "implementation": self.implementation,
-        }
-    
-    def get_properties(self) -> Dict[str, Any]:
-        """Get the input schema properties."""
-        return self.input_schema.get("properties", {})
-    
-    def get_required_fields(self) -> list:
-        """Get the required input fields."""
-        return self.input_schema.get("required", [])
-    
+
     def get_handler(self) -> Optional[str]:
         """Get the implementation handler."""
         return self.implementation.get("handler")
@@ -78,4 +60,3 @@ def get_tool(tool_name: str, tools_dir: Optional[str] = None) -> Optional[ToolDe
             continue
     
     return None
-

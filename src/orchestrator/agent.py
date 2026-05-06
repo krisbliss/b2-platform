@@ -71,60 +71,25 @@ def _load_agent_definition_from_file(agent_file: Path) -> AgentDefinition:
     )
 
 
-def get_agent(agent_name: str, agents_dir: Optional[str] = None) -> Optional[AgentDefinition]:
-    """
-    Pull an agent by name from YAML files and return its definition.
-    """
-    directory = _agents_dir(agents_dir)
-
-    if not directory.exists():
-        raise FileNotFoundError(f"Agents directory not found at {directory}")
-
-    yaml_module = _load_yaml_module()
-
-    for yaml_file in directory.glob("*.yaml"):
-        try:
-            agent_definition = _load_agent_definition_from_file(yaml_file)
-            if agent_definition.name == agent_name:
-                return agent_definition
-        except yaml_module.YAMLError as exc:
-            print(f"Warning: Failed to parse {yaml_file}: {exc}")
-
-    return None
-
-
 class Agent:
     """An immutable AI agent configured from an agent YAML file."""
 
     def __init__(
         self,
-        agent_name: Optional[str] = None,
-        yaml_path: Optional[str] = None,
-        agents_dir: Optional[str] = None,
+        yaml_path: str,
     ):
         """
         Initialize an Agent from YAML.
 
         Args:
-            agent_name: Name of the agent to load from the agents directory.
-            yaml_path: Explicit path to an agent YAML file.
-            agents_dir: Optional override for the agents directory.
+            yaml_path: Path to an agent YAML file.
 
         Raises:
-            ValueError: If neither agent_name nor yaml_path is provided.
-            FileNotFoundError: If the YAML file or agents directory cannot be found.
+            FileNotFoundError: If the YAML file cannot be found.
         """
         start = perf_counter()
-        if yaml_path is None and agent_name is None:
-            raise ValueError("Either agent_name or yaml_path must be provided")
-
         load_start = perf_counter()
-        if yaml_path is not None:
-            agent_definition = _load_agent_definition_from_file(Path(yaml_path))
-        else:
-            agent_definition = get_agent(agent_name or "", agents_dir)
-            if agent_definition is None:
-                raise ValueError(f"Agent '{agent_name}' not found")
+        agent_definition = _load_agent_definition_from_file(Path(yaml_path))
         logger.info("agent.load_yaml elapsed=%.3fs name=%s", perf_counter() - load_start, agent_definition.name)
 
         self.definition = agent_definition
@@ -178,16 +143,6 @@ class Agent:
             len(self.tool_names),
         )
         logger.info("agent.init done elapsed=%.3fs name=%s", perf_counter() - start, self.name)
-
-    @classmethod
-    def from_name(cls, agent_name: str, agents_dir: Optional[str] = None) -> "Agent":
-        """Construct an Agent from an agent name."""
-        return cls(agent_name=agent_name, agents_dir=agents_dir)
-
-    @classmethod
-    def from_yaml(cls, yaml_path: str) -> "Agent":
-        """Construct an Agent from an explicit YAML path."""
-        return cls(yaml_path=yaml_path)
 
     @staticmethod
     def _resolve_handler(handler_path: str) -> Any:
