@@ -1,4 +1,4 @@
-from loop import main as run_loop
+from .loop import main as run_loop
 
 
 def main() -> None:

@@ -1,14 +1,25 @@
-from typing import Optional
+import logging
 
-from router import route_agent
+from .router import AgentRouter
+from .session import Session
+
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
 def chat_loop() -> None:
 	"""Run a simple terminal chat loop against the routed agent."""
-	active_agent = None
+	router = AgentRouter()
+	active_session: Session | None = None
 
 	while True:
-		query = input("You: ").strip()
+		try:
+			query = input("You: ").strip()
+		except KeyboardInterrupt:
+			print("\nInterrupted. Type '/route' to reroute or 'exit' to quit.")
+			continue
+		except EOFError:
+			print("\nGoodbye.")
+			break
 
 		if not query:
 			continue
@@ -17,12 +28,24 @@ def chat_loop() -> None:
 			print("Goodbye.")
 			break
 
-		if active_agent is None:
-			active_agent = route_agent(query)
-			print(f"Routed to agent: {active_agent.name}")
+		if query == "/route":
+			active_session = None
+			print("Routing reset. Your next message will select an agent.")
+			continue
 
-		response = active_agent.call(query)
-		print(f"Agent: {response}")
+		if active_session is None:
+			try:
+				agent, metadata = router.route_with_metadata(query)
+			except Exception as exc:
+				print(f"Router: {exc}")
+				continue
+			active_session = Session(agent)
+			print(f"Routed to agent: {agent.name} (score={metadata['score']:.3f})")
+
+		print("Agent: ", end="", flush=True)
+		for chunk in active_session.send_stream(query):
+			print(chunk, end="", flush=True)
+		print()
 
 
 def main() -> None:
