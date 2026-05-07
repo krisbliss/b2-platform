@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal, Optional, Sequence
 from pydantic import Field
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 
@@ -28,13 +29,6 @@ class AgentDefinition:
     skills: list[str] = field(default_factory=list)
     tools: list[str] = field(default_factory=list)
     provider: dict[str, Any] = field(default_factory=dict)
-
-
-def _agents_dir(agents_dir: Optional[str] = None) -> Path:
-    if agents_dir is None:
-        project_root = Path(__file__).parent.parent.parent
-        return project_root / "agents"
-    return Path(agents_dir)
 
 
 def _load_yaml_module():
@@ -94,15 +88,7 @@ class Agent:
         self.base_prompt = definition.system_prompt
         self.skill_names = list(definition.skills)
         self.tool_names = list(definition.tools)
-        provider_type = str(definition.provider.get("type", "")).lower()
-        model_name = definition.provider.get("model")
-        if provider_type != "gemini":
-            raise ValueError(f"Unsupported provider type '{provider_type}'. Only 'gemini' is supported.")
-        self.model_settings = self._model_settings_from_provider(definition.provider, str(model_name))
-
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY is required to run Gemini agents.")
+        model, self.model_settings = self._build_model(definition.provider)
 
         enhanced_prompt = (
             prompts.add_skills_to_prompt(self.base_prompt, self.skill_names)
@@ -111,7 +97,6 @@ class Agent:
         )
 
         model_start = perf_counter()
-        model = GoogleModel(str(model_name), provider=GoogleProvider(api_key=api_key))
         self.pydantic_ai_agent = PydanticAgent(
             model=model,
             system_prompt=enhanced_prompt,
@@ -121,7 +106,7 @@ class Agent:
             "agent.model_init elapsed=%.3fs name=%s model=%s settings=%s",
             perf_counter() - model_start,
             self.name,
-            model_name,
+            definition.provider.get("model"),
             sorted(self.model_settings.keys()),
         )
 
@@ -135,13 +120,6 @@ class Agent:
             len(self.tool_names),
         )
         logger.info("agent.init done elapsed=%.3fs name=%s", perf_counter() - start, self.name)
-
-    @classmethod
-    def from_yaml(cls, yaml_path: str | Path) -> "Agent":
-        load_start = perf_counter()
-        definition = _load_agent_definition_from_file(Path(yaml_path))
-        logger.info("agent.load_yaml elapsed=%.3fs name=%s", perf_counter() - load_start, definition.name)
-        return cls(definition)
 
     @staticmethod
     def _resolve_handler(handler_path: str) -> Any:
@@ -159,6 +137,26 @@ class Agent:
             else:
                 settings["google_thinking_config"] = {"thinking_budget": int(thinking_budget)}
         return settings
+
+    @classmethod
+    def _build_model(cls, provider: dict[str, Any]) -> tuple[Model, dict[str, Any]]:
+        provider_type = str(provider.get("type", "")).lower()
+        model_name = str(provider.get("model"))
+
+        if provider_type == "gemini":
+            return cls._build_gemini_model(provider, model_name)
+
+        raise ValueError(f"Unsupported provider type '{provider_type}'. Only 'gemini' is supported.")
+
+    @classmethod
+    def _build_gemini_model(cls, provider: dict[str, Any], model_name: str) -> tuple[GoogleModel, dict[str, Any]]:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is required to run Gemini agents.")
+
+        model_settings = cls._model_settings_from_provider(provider, model_name)
+        model = GoogleModel(model_name, provider=GoogleProvider(api_key=api_key))
+        return model, model_settings
 
     @classmethod
     def _json_schema_to_python_type(cls, schema: dict[str, Any]) -> Any:
@@ -258,21 +256,6 @@ class Agent:
         )
         logger.info("agent.tool_registered elapsed=%.3fs tool=%s", perf_counter() - start, tool_name)
 
-    def run(
-        self,
-        user_message: str,
-        message_history: Optional[Sequence[ModelMessage]] = None,
-    ) -> Any:
-        start = perf_counter()
-        logger.info("agent.run start name=%s history=%d", self.name, len(message_history or []))
-        result = self.pydantic_ai_agent.run_sync(
-            user_message,
-            message_history=message_history,
-            model_settings=self.model_settings,
-        )
-        logger.info("agent.run done elapsed=%.3fs name=%s", perf_counter() - start, self.name)
-        return result
-
     def run_stream(
         self,
         user_message: str,
@@ -287,9 +270,3 @@ class Agent:
         )
         logger.info("agent.run_stream returned elapsed=%.3fs name=%s", perf_counter() - start, self.name)
         return streamed
-
-    def get_tool(self, tool_name: str) -> Optional[tools.ToolDefinition]:
-        """Get a tool definition by name from the agent's declared tools."""
-        if tool_name not in self.tool_names:
-            return None
-        return tools.get_tool(tool_name)

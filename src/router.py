@@ -28,7 +28,6 @@ class _CachedAgent:
 	agent: agent_module.Agent
 	yaml_path: str
 	mtime: float
-	content_hash: str
 
 
 class AgentRouter:
@@ -40,14 +39,12 @@ class AgentRouter:
 		db_path: Optional[str] = None,
 		embedder: Optional[GoogleEmbedder] = None,
 		min_score: float = 0.35,
-		fallback_agent_name: str | None = None,
 	):
 		start = perf_counter()
 		self.agents_dir = self._agents_dir(agents_dir)
 		self.store = AgentIndexStore(db_path=db_path)
 		self.embedder = embedder or GoogleEmbedder()
 		self.min_score = min_score
-		self.fallback_agent_name = fallback_agent_name
 		self._agent_cache: dict[str, _CachedAgent] = {}
 		self.refresh_index()
 		logger.info("router.init done elapsed=%.3fs", perf_counter() - start)
@@ -64,27 +61,14 @@ class AgentRouter:
 		return hashlib.sha256(content).hexdigest()
 
 	@staticmethod
-	def _load_yaml_metadata(yaml_path: Path) -> agent_module.AgentDefinition:
+	def _load_agent_definition(yaml_path: Path) -> agent_module.AgentDefinition:
 		return agent_module._load_agent_definition_from_file(yaml_path)
 
 	@staticmethod
 	def _embed_text(definition: agent_module.AgentDefinition) -> str:
 		return f"{definition.name}\n{definition.description}\n{definition.system_prompt}"
 
-	def clear_cache(self) -> None:
-		self._agent_cache.clear()
-
-	def _evict_changed_cache_entry(self, name: str, content_hash: str) -> None:
-		cached = self._agent_cache.get(name)
-		if cached and cached.content_hash != content_hash:
-			logger.info("router.cache evict changed name=%s", name)
-			self._agent_cache.pop(name, None)
-
-	def _load_agent_for_record(
-		self,
-		record: StoredAgentRecord,
-		definition: agent_module.AgentDefinition | None = None,
-	) -> agent_module.Agent:
+	def _load_agent_for_record(self, record: StoredAgentRecord) -> agent_module.Agent:
 		yaml_path = Path(record.yaml_path)
 		mtime = yaml_path.stat().st_mtime
 		cached = self._agent_cache.get(record.name)
@@ -93,15 +77,12 @@ class AgentRouter:
 			return cached.agent
 
 		logger.info("router.cache miss name=%s", record.name)
-		if definition is None:
-			definition = self._load_yaml_metadata(yaml_path)
-
+		definition = self._load_agent_definition(yaml_path)
 		agent = agent_module.Agent(definition)
 		self._agent_cache[record.name] = _CachedAgent(
 			agent=agent,
 			yaml_path=record.yaml_path,
 			mtime=mtime,
-			content_hash=record.content_hash,
 		)
 		return agent
 
@@ -127,11 +108,10 @@ class AgentRouter:
 			return
 
 		for yaml_path in yaml_paths:
-			definition = self._load_yaml_metadata(yaml_path)
+			definition = self._load_agent_definition(yaml_path)
 			indexed_names.append(definition.name)
 
 			content_hash = self._hash_content(definition)
-			self._evict_changed_cache_entry(definition.name, content_hash)
 
 			existing_row = existing.get(definition.name)
 			if (
@@ -175,10 +155,6 @@ class AgentRouter:
 			unchanged,
 		)
 
-	def route(self, query: str) -> agent_module.Agent:
-		agent, _metadata = self.route_with_metadata(query)
-		return agent
-
 	def route_with_metadata(self, query: str) -> tuple[agent_module.Agent, dict[str, str | float]]:
 		"""Return the routed agent plus the match metadata."""
 		start = perf_counter()
@@ -193,19 +169,7 @@ class AgentRouter:
 
 		record, score = matches[0]
 		if score < self.min_score:
-			if not self.fallback_agent_name:
-				raise BelowThresholdError(score, self.min_score)
-			fallback_record = next(
-				(record for record in self.store.all_agents() if record.name == self.fallback_agent_name),
-				None,
-			)
-			if fallback_record is None:
-				raise ValueError(f"Fallback agent '{self.fallback_agent_name}' is not indexed")
-			record = fallback_record
-			score = 0.0
-			routed_via = "fallback"
-		else:
-			routed_via = "match"
+			raise BelowThresholdError(score, self.min_score)
 
 		load_start = perf_counter()
 		agent = self._load_agent_for_record(record)
@@ -217,5 +181,4 @@ class AgentRouter:
 			"description": record.description,
 			"yaml_path": record.yaml_path,
 			"score": score,
-			"routed_via": routed_via,
 		}
