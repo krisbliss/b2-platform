@@ -202,6 +202,24 @@ class LogEvent:
             msg = f"cleartext_payload contains forbidden PII keys: {keys}"
             raise ValueError(msg)
 
+    def emit(self, session: Any) -> None:
+        """Append this event to an in-memory session log buffer."""
+
+        if not hasattr(session, "log_buffer"):
+            msg = "session must expose a log_buffer attribute"
+            raise AttributeError(msg)
+
+        log_buffer = session.log_buffer
+        append = getattr(log_buffer, "append", None)
+        if append is None:
+            msg = "session.log_buffer must be list-like and expose append"
+            raise AttributeError(msg)
+        if not callable(append):
+            msg = "session.log_buffer.append must be callable"
+            raise TypeError(msg)
+
+        append(self)
+
 
 def _find_forbidden_cleartext_keys(value: Any) -> set[str]:
     if isinstance(value, dict):

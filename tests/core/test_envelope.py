@@ -356,3 +356,76 @@ def test_log_event_safe_cleartext_payload_is_accepted() -> None:
 
     assert event.cleartext_payload["input_type"] == InputType.TEXT
     assert event.pii_envelope == b"encrypted-user-data"
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.log_buffer: list[LogEvent] = []
+
+
+def test_log_event_emit_appends_event_to_session_log_buffer() -> None:
+    session = FakeSession()
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+
+    event.emit(session)
+
+    assert session.log_buffer == [event]
+
+
+def test_log_event_multiple_emits_preserve_order() -> None:
+    session = FakeSession()
+    first = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+    second = LogEvent(
+        event_type=LogEventType.MESSAGE_NORMALIZED,
+        session_id_hash="session-hash",
+    )
+
+    first.emit(session)
+    second.emit(session)
+
+    assert session.log_buffer == [first, second]
+
+
+def test_log_event_emit_missing_log_buffer_raises_attribute_error() -> None:
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+
+    with pytest.raises(AttributeError, match="session must expose a log_buffer attribute"):
+        event.emit(object())
+
+
+def test_log_event_emit_non_appendable_log_buffer_raises_clear_error() -> None:
+    class BadSession:
+        log_buffer = object()
+
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+    )
+
+    with pytest.raises(AttributeError, match="session.log_buffer must be list-like and expose append"):
+        event.emit(BadSession())
+
+
+def test_log_event_emit_introduces_no_external_side_effects() -> None:
+    session = FakeSession()
+    event = LogEvent(
+        event_type=LogEventType.MESSAGE_RECEIVED,
+        session_id_hash="session-hash",
+        cleartext_payload={"status": "received"},
+    )
+
+    before_payload = dict(event.cleartext_payload)
+    event.emit(session)
+
+    assert session.log_buffer == [event]
+    assert event.cleartext_payload == before_payload
+    assert event.pii_envelope is None
