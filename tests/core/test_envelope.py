@@ -17,6 +17,7 @@ from app.core.envelope import (
 )
 
 
+# Enum value tests lock the serialized string contracts used across envelopes.
 def test_input_type_values_are_lowercase_strings() -> None:
     assert InputType.TEXT == "text"
     assert InputType.IMAGE == "image"
@@ -47,6 +48,7 @@ def test_log_event_type_values_are_lowercase_strings() -> None:
     assert LogEventType.ERROR == "error"
 
 
+# Session ID tests cover deterministic hashing, daily rotation, and raw metadata privacy.
 def test_session_id_is_consistent_within_a_day() -> None:
     day = date(2026, 5, 2)
 
@@ -77,6 +79,13 @@ def test_session_id_is_sha256_hex_digest() -> None:
     assert re.fullmatch(r"[0-9a-f]{64}", session_id)
 
 
+def test_make_session_id_returns_sha256_hex_digest() -> None:
+    session_id = make_session_id("user-123", "sms")
+
+    assert len(session_id) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", session_id)
+
+
 def test_session_id_does_not_include_raw_user_id() -> None:
     raw_user_id = "user-123"
 
@@ -85,6 +94,7 @@ def test_session_id_does_not_include_raw_user_id() -> None:
     assert raw_user_id not in session_id
 
 
+# Location tests keep approximate context useful while preventing coordinate leakage.
 def test_location_context_defaults() -> None:
     context = LocationContext()
 
@@ -166,6 +176,7 @@ def test_canonical_message_timestamp_is_timezone_aware() -> None:
     assert datetime.now(message.timestamp.tzinfo).utcoffset() == message.timestamp.utcoffset()
 
 
+# Agent prompt tests verify only privacy-safe fields are serialized for runtime use.
 def test_agent_prompt_includes_text_content_for_text_messages() -> None:
     message = CanonicalMessage(
         session_id="session-123",
@@ -276,6 +287,7 @@ def test_agent_prompt_does_not_mutate_original_message() -> None:
     assert message.session_context == {"eligible_programs": ["housing"]}
 
 
+# Log event tests cover safe cleartext metadata and opaque PII envelope handling.
 def test_log_event_default_values() -> None:
     event = LogEvent(
         event_type=LogEventType.MESSAGE_RECEIVED,
@@ -359,6 +371,7 @@ def test_log_event_safe_cleartext_payload_is_accepted() -> None:
     assert event.pii_envelope == b"encrypted-user-data"
 
 
+# Emit tests intentionally use a tiny fake session instead of introducing session architecture.
 class FakeSession:
     def __init__(self) -> None:
         self.log_buffer: list[LogEvent] = []
@@ -432,6 +445,7 @@ def test_log_event_emit_introduces_no_external_side_effects() -> None:
     assert event.pii_envelope is None
 
 
+# Privacy regression tests pin sensitive exclusions so future edits do not loosen them.
 def test_privacy_regression_location_context_has_no_coordinate_fields() -> None:
     field_names = {field.name for field in fields(LocationContext)}
     forbidden = {"lat", "lng", "latitude", "longitude", "coordinates", "gps", "raw_location"}
