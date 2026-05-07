@@ -1,4 +1,4 @@
-"""Foundation types for envelope-related message metadata."""
+"""Privacy-aware envelope types for normalized messages and lifecycle logs."""
 
 import re
 from copy import deepcopy
@@ -10,7 +10,7 @@ from typing import Any
 
 
 class InputType(StrEnum):
-    """Identifies the kind of user input contained in an envelope."""
+    """Identifies the kind of user input contained in a normalized message."""
 
     TEXT = "text"
     IMAGE = "image"
@@ -20,7 +20,7 @@ class InputType(StrEnum):
 
 
 class SubmissionType(StrEnum):
-    """Categorizes why a submission was provided to the system."""
+    """Categorizes why a user submission was provided to the system."""
 
     INTAKE = "intake"
     VERIFICATION_EVIDENCE = "verification_evidence"
@@ -46,7 +46,6 @@ class LogEventType(StrEnum):
     RESPONSE_SENT = "response_sent"
     ERROR = "error"
 
-# hardcode these fields from being shared to agent
 _AGENT_PROMPT_FORBIDDEN_KEYS = {
     "channel",
     "channel_user_id",
@@ -123,7 +122,7 @@ class LocationContext:
 
 @dataclass(slots=True)
 class CanonicalMessage:
-    """Normalized message envelope shared across channel-specific adapters."""
+    """Channel-neutral message envelope with privacy-safe prompt serialization."""
 
     session_id: str
     channel: str
@@ -185,7 +184,7 @@ def _contains_phone_number(value: str) -> bool:
 
 @dataclass(slots=True)
 class LogEvent:
-    """Structured lifecycle event with cleartext metadata and opaque PII storage."""
+    """Structured lifecycle event with safe cleartext metadata and opaque PII bytes."""
 
     event_type: LogEventType
     session_id_hash: str
