@@ -60,6 +60,7 @@ _AGENT_PROMPT_FORBIDDEN_KEYS = {
     "phone",
     "phone_number",
     "raw_channel_user_id",
+    "raw_phone",
     "raw_phone_number",
     "session_id",
 }
