@@ -13,6 +13,7 @@ from app.core.envelope import (
     LogEventType,
     SubmissionType,
     _make_session_id_for_date,
+    make_session_id,
 )
 
 
@@ -429,3 +430,102 @@ def test_log_event_emit_introduces_no_external_side_effects() -> None:
     assert session.log_buffer == [event]
     assert event.cleartext_payload == before_payload
     assert event.pii_envelope is None
+
+
+def test_privacy_regression_location_context_has_no_coordinate_fields() -> None:
+    field_names = {field.name for field in fields(LocationContext)}
+    forbidden = {"lat", "lng", "latitude", "longitude", "coordinates", "gps", "raw_location"}
+
+    assert field_names.isdisjoint(forbidden)
+
+
+def test_privacy_regression_agent_prompt_excludes_private_and_location_keys() -> None:
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        media_url="https://example.test/file.jpg",
+        session_context={
+            "phone": "+1 555 010 1234",
+            "phone_number": "+1 555 010 5678",
+            "raw_phone": "+1 555 010 9999",
+            "coordinates": [37.8, -122.3],
+        },
+        prior_context=[
+            {
+                "session_id": "session-123",
+                "channel": "sms",
+            },
+        ],
+    )
+
+    prompt = message.to_agent_prompt()
+    forbidden = {
+        "session_id",
+        "channel",
+        "media_url",
+        "phone",
+        "phone_number",
+        "raw_phone",
+        "coordinates",
+    }
+
+    assert _collect_keys(prompt).isdisjoint(forbidden)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "phone",
+        "phone_number",
+        "raw_phone",
+        "name",
+        "full_name",
+        "lat",
+        "lng",
+        "latitude",
+        "longitude",
+        "coordinates",
+        "gps",
+        "raw_location",
+    ],
+)
+def test_privacy_regression_log_event_rejects_cleartext_pii_location_keys(key: str) -> None:
+    with pytest.raises(ValueError, match="cleartext_payload contains forbidden PII keys"):
+        LogEvent(
+            event_type=LogEventType.MESSAGE_RECEIVED,
+            session_id_hash="session-hash",
+            cleartext_payload={"event": {"metadata": {key: "unsafe"}}},
+        )
+
+
+def test_privacy_regression_make_session_id_does_not_expose_raw_channel_user_id() -> None:
+    raw_channel_user_id = "raw-user-123"
+
+    session_id = make_session_id(raw_channel_user_id, "sms")
+
+    assert raw_channel_user_id not in session_id
+
+
+def test_privacy_regression_make_session_id_does_not_expose_raw_channel_name() -> None:
+    raw_channel = "sms"
+
+    session_id = make_session_id("raw-user-123", raw_channel)
+
+    assert raw_channel not in session_id
+
+
+def _collect_keys(value: object) -> set[str]:
+    if isinstance(value, dict):
+        keys = {str(key) for key in value}
+        for child in value.values():
+            keys.update(_collect_keys(child))
+        return keys
+
+    if isinstance(value, list | tuple):
+        keys: set[str] = set()
+        for item in value:
+            keys.update(_collect_keys(item))
+        return keys
+
+    return set()
