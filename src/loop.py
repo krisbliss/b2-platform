@@ -1,6 +1,6 @@
 import logging
 
-from .router import AgentRouter
+from .router import AgentRouter, BelowThresholdError
 from .session import Session
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,6 +36,9 @@ def chat_loop() -> None:
 		if active_session is None:
 			try:
 				agent, metadata = router.route_with_metadata(query)
+			except BelowThresholdError:
+				print("Router: I'm not sure which agent fits - try rephrasing, or type /route to reset.")
+				continue
 			except Exception as exc:
 				print(f"Router: {exc}")
 				continue

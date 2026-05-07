@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import logging
 from pathlib import Path
@@ -13,6 +14,23 @@ from .store import AgentIndexStore, StoredAgentRecord
 logger = logging.getLogger(__name__)
 
 
+class BelowThresholdError(ValueError):
+	"""Raised when no route meets the configured minimum score."""
+
+	def __init__(self, score: float, threshold: float):
+		self.score = score
+		self.threshold = threshold
+		super().__init__(f"No agent met routing threshold ({score:.3f} < {threshold:.3f})")
+
+
+@dataclass
+class _CachedAgent:
+	agent: agent_module.Agent
+	yaml_path: str
+	mtime: float
+	content_hash: str
+
+
 class AgentRouter:
 	"""Index agent YAML files and route queries to the best matching agent."""
 
@@ -21,13 +39,16 @@ class AgentRouter:
 		agents_dir: Optional[str] = None,
 		db_path: Optional[str] = None,
 		embedder: Optional[GoogleEmbedder] = None,
-		min_score: float = 0.5,
+		min_score: float = 0.35,
+		fallback_agent_name: str | None = None,
 	):
 		start = perf_counter()
 		self.agents_dir = self._agents_dir(agents_dir)
 		self.store = AgentIndexStore(db_path=db_path)
 		self.embedder = embedder or GoogleEmbedder()
 		self.min_score = min_score
+		self.fallback_agent_name = fallback_agent_name
+		self._agent_cache: dict[str, _CachedAgent] = {}
 		self.refresh_index()
 		logger.info("router.init done elapsed=%.3fs", perf_counter() - start)
 
@@ -38,51 +59,81 @@ class AgentRouter:
 		return Path(agents_dir)
 
 	@staticmethod
-	def _hash_content(description: str, system_prompt: str) -> str:
-		content = f"{description}\n---\n{system_prompt}".encode("utf-8")
+	def _hash_content(definition: agent_module.AgentDefinition) -> str:
+		content = f"{definition.description}\n---\n{definition.system_prompt}".encode("utf-8")
 		return hashlib.sha256(content).hexdigest()
 
 	@staticmethod
-	def _load_yaml_metadata(yaml_path: Path) -> dict[str, str]:
-		yaml_module = agent_module._load_yaml_module()
+	def _load_yaml_metadata(yaml_path: Path) -> agent_module.AgentDefinition:
+		return agent_module._load_agent_definition_from_file(yaml_path)
 
-		with open(yaml_path, "r", encoding="utf-8") as handle:
-			agent_data = yaml_module.safe_load(handle) or {}
+	@staticmethod
+	def _embed_text(definition: agent_module.AgentDefinition) -> str:
+		return f"{definition.name}\n{definition.description}\n{definition.system_prompt}"
 
-		name = agent_data.get("name")
-		system_prompt = agent_data.get("system_prompt", "")
-		description = agent_data.get("description") or (system_prompt.splitlines()[0] if system_prompt else "")
+	def clear_cache(self) -> None:
+		self._agent_cache.clear()
 
-		if not name:
-			raise ValueError(f"Agent file '{yaml_path}' is missing required 'name' field")
+	def _evict_changed_cache_entry(self, name: str, content_hash: str) -> None:
+		cached = self._agent_cache.get(name)
+		if cached and cached.content_hash != content_hash:
+			logger.info("router.cache evict changed name=%s", name)
+			self._agent_cache.pop(name, None)
 
-		embed_text = f"{name}\n{description}\n{system_prompt}"
-		return {
-			"name": name,
-			"description": description,
-			"system_prompt": system_prompt,
-			"yaml_path": str(yaml_path),
-			"embed_text": embed_text,
-		}
+	def _load_agent_for_record(
+		self,
+		record: StoredAgentRecord,
+		definition: agent_module.AgentDefinition | None = None,
+	) -> agent_module.Agent:
+		yaml_path = Path(record.yaml_path)
+		mtime = yaml_path.stat().st_mtime
+		cached = self._agent_cache.get(record.name)
+		if cached and cached.yaml_path == record.yaml_path and cached.mtime == mtime:
+			logger.info("router.cache hit name=%s", record.name)
+			return cached.agent
+
+		logger.info("router.cache miss name=%s", record.name)
+		if definition is None:
+			definition = self._load_yaml_metadata(yaml_path)
+
+		agent = agent_module.Agent(definition)
+		self._agent_cache[record.name] = _CachedAgent(
+			agent=agent,
+			yaml_path=record.yaml_path,
+			mtime=mtime,
+			content_hash=record.content_hash,
+		)
+		return agent
 
 	def refresh_index(self) -> None:
 		start = perf_counter()
 		if not self.agents_dir.exists():
-			raise FileNotFoundError(f"Agents directory not found at {self.agents_dir}")
+			logger.warning(
+				"router.refresh_index agents directory not found at %s; keeping existing store rows",
+				self.agents_dir,
+			)
+			return
 
 		existing: dict[str, StoredAgentRecord] = {r.name: r for r in self.store.all_agents()}
 		indexed_names: list[str] = []
-		to_embed_rows: list[dict[str, str]] = []
+		to_embed_rows: list[tuple[agent_module.AgentDefinition, Path, str]] = []
 		unchanged = 0
+		yaml_paths = list(self.agents_dir.glob("*.yaml"))
+		if not yaml_paths:
+			logger.warning(
+				"router.refresh_index found zero YAML files in %s; keeping existing store rows",
+				self.agents_dir,
+			)
+			return
 
-		for yaml_path in self.agents_dir.glob("*.yaml"):
-			metadata = self._load_yaml_metadata(yaml_path)
-			indexed_names.append(metadata["name"])
+		for yaml_path in yaml_paths:
+			definition = self._load_yaml_metadata(yaml_path)
+			indexed_names.append(definition.name)
 
-			content_hash = self._hash_content(metadata["description"], metadata["system_prompt"])
-			metadata["content_hash"] = content_hash
+			content_hash = self._hash_content(definition)
+			self._evict_changed_cache_entry(definition.name, content_hash)
 
-			existing_row = existing.get(metadata["name"])
+			existing_row = existing.get(definition.name)
 			if (
 				existing_row
 				and existing_row.content_hash == content_hash
@@ -92,27 +143,31 @@ class AgentRouter:
 				unchanged += 1
 				continue
 
-			to_embed_rows.append(metadata)
+			to_embed_rows.append((definition, yaml_path, content_hash))
 
 		embed_start = perf_counter()
-		embeddings = self.embedder.embed_documents([row["embed_text"] for row in to_embed_rows])
+		embeddings = self.embedder.embed_documents([self._embed_text(row[0]) for row in to_embed_rows])
 		logger.info(
 			"router.refresh_index embeddings elapsed=%.3fs rows=%d",
 			perf_counter() - embed_start,
 			len(to_embed_rows),
 		)
 
-		for i, row in enumerate(to_embed_rows):
+		for i, (definition, yaml_path, content_hash) in enumerate(to_embed_rows):
 			self.store.upsert_agent(
-				name=row["name"],
-				description=row["description"],
-				yaml_path=row["yaml_path"],
+				name=definition.name,
+				description=definition.description,
+				yaml_path=str(yaml_path),
 				embedding=embeddings[i],
 				embedding_model=self.embedder.model,
-				content_hash=row["content_hash"],
+				content_hash=content_hash,
 			)
 
 		self.store.delete_missing(indexed_names)
+		for cached_name in list(self._agent_cache):
+			if cached_name not in indexed_names:
+				logger.info("router.cache evict missing name=%s", cached_name)
+				self._agent_cache.pop(cached_name, None)
 		logger.info(
 			"router.refresh_index done elapsed=%.3fs new=%d unchanged=%d",
 			perf_counter() - start,
@@ -138,12 +193,22 @@ class AgentRouter:
 
 		record, score = matches[0]
 		if score < self.min_score:
-			raise ValueError(
-				f"No agent met routing threshold ({score:.3f} < {self.min_score:.3f})"
+			if not self.fallback_agent_name:
+				raise BelowThresholdError(score, self.min_score)
+			fallback_record = next(
+				(record for record in self.store.all_agents() if record.name == self.fallback_agent_name),
+				None,
 			)
+			if fallback_record is None:
+				raise ValueError(f"Fallback agent '{self.fallback_agent_name}' is not indexed")
+			record = fallback_record
+			score = 0.0
+			routed_via = "fallback"
+		else:
+			routed_via = "match"
 
 		load_start = perf_counter()
-		agent = agent_module.Agent(record.yaml_path)
+		agent = self._load_agent_for_record(record)
 		logger.info("router.route agent load elapsed=%.3fs name=%s", perf_counter() - load_start, record.name)
 		logger.info("router.route done elapsed=%.3fs score=%.3f", perf_counter() - start, score)
 
@@ -152,4 +217,5 @@ class AgentRouter:
 			"description": record.description,
 			"yaml_path": record.yaml_path,
 			"score": score,
+			"routed_via": routed_via,
 		}

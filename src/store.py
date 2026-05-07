@@ -1,10 +1,13 @@
 import sqlite3
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,7 +129,12 @@ class AgentIndexStore:
         valid_names = list(valid_names)
         with self._connect() as connection:
             if not valid_names:
-                connection.execute("DELETE FROM agents")
+                row = connection.execute("SELECT COUNT(*) AS count FROM agents").fetchone()
+                row_count = int(row["count"]) if row else 0
+                logger.warning(
+                    "store.delete_missing called with no valid agent names; keeping %d indexed rows",
+                    row_count,
+                )
                 return
 
             placeholders = ",".join("?" for _ in valid_names)
@@ -134,6 +142,11 @@ class AgentIndexStore:
                 f"DELETE FROM agents WHERE name NOT IN ({placeholders})",
                 valid_names,
             )
+
+    def clear(self) -> None:
+        """Explicitly delete every indexed agent."""
+        with self._connect() as connection:
+            connection.execute("DELETE FROM agents")
 
     def all_agents(self) -> list[StoredAgentRecord]:
         with self._connect() as connection:

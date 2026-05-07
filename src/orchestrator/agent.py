@@ -11,11 +11,10 @@ from pydantic import Field
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.google import GoogleModel
-from dotenv import load_dotenv
+from pydantic_ai.providers.google import GoogleProvider
 
 from . import prompts, tools
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -25,10 +24,10 @@ class AgentDefinition:
 
     name: str
     system_prompt: str
+    description: str = ""
     skills: list[str] = field(default_factory=list)
     tools: list[str] = field(default_factory=list)
     provider: dict[str, Any] = field(default_factory=dict)
-    behavior: dict[str, Any] = field(default_factory=dict)
 
 
 def _agents_dir(agents_dir: Optional[str] = None) -> Path:
@@ -61,13 +60,21 @@ def _load_agent_definition_from_file(agent_file: Path) -> AgentDefinition:
     if not system_prompt:
         raise ValueError(f"Agent file '{agent_file}' is missing required 'system_prompt' field")
 
+    provider = agent_data.get("provider")
+    if not provider:
+        raise ValueError(f"Agent file '{agent_file}' is missing required 'provider' field")
+    if not provider.get("type"):
+        raise ValueError(f"Agent file '{agent_file}' is missing required 'provider.type' field")
+    if not provider.get("model"):
+        raise ValueError(f"Agent file '{agent_file}' is missing required 'provider.model' field")
+
     return AgentDefinition(
         name=name,
         system_prompt=system_prompt,
+        description=agent_data.get("description") or (system_prompt.splitlines()[0] if system_prompt else ""),
         skills=agent_data.get("skills", []) or [],
         tools=agent_data.get("tools", []) or [],
-        provider=agent_data.get("provider", {}) or {},
-        behavior=agent_data.get("behavior", {}) or {},
+        provider=provider,
     )
 
 
@@ -76,41 +83,26 @@ class Agent:
 
     def __init__(
         self,
-        yaml_path: str,
+        definition: AgentDefinition,
     ):
         """
-        Initialize an Agent from YAML.
-
-        Args:
-            yaml_path: Path to an agent YAML file.
-
-        Raises:
-            FileNotFoundError: If the YAML file cannot be found.
+        Initialize an Agent from a parsed definition.
         """
         start = perf_counter()
-        load_start = perf_counter()
-        agent_definition = _load_agent_definition_from_file(Path(yaml_path))
-        logger.info("agent.load_yaml elapsed=%.3fs name=%s", perf_counter() - load_start, agent_definition.name)
-
-        self.definition = agent_definition
-        self.name = agent_definition.name
-        self.base_prompt = agent_definition.system_prompt
-        self.skill_names = list(agent_definition.skills)
-        self.tool_names = list(agent_definition.tools)
-        self.behavior = agent_definition.behavior
-        provider_type = str(agent_definition.provider.get("type", "")).lower()
-        model_name = agent_definition.provider.get("model")
+        self.definition = definition
+        self.name = definition.name
+        self.base_prompt = definition.system_prompt
+        self.skill_names = list(definition.skills)
+        self.tool_names = list(definition.tools)
+        provider_type = str(definition.provider.get("type", "")).lower()
+        model_name = definition.provider.get("model")
         if provider_type != "gemini":
             raise ValueError(f"Unsupported provider type '{provider_type}'. Only 'gemini' is supported.")
-        if not model_name:
-            raise ValueError(f"Agent '{self.name}' is missing provider.model")
-        self.model_settings = self._model_settings_from_provider(agent_definition.provider, str(model_name))
+        self.model_settings = self._model_settings_from_provider(definition.provider, str(model_name))
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required to run Gemini agents.")
-        if not os.getenv("GOOGLE_API_KEY"):
-            os.environ["GOOGLE_API_KEY"] = api_key
 
         enhanced_prompt = (
             prompts.add_skills_to_prompt(self.base_prompt, self.skill_names)
@@ -119,7 +111,7 @@ class Agent:
         )
 
         model_start = perf_counter()
-        model = GoogleModel(model_name)
+        model = GoogleModel(str(model_name), provider=GoogleProvider(api_key=api_key))
         self.pydantic_ai_agent = PydanticAgent(
             model=model,
             system_prompt=enhanced_prompt,
@@ -143,6 +135,13 @@ class Agent:
             len(self.tool_names),
         )
         logger.info("agent.init done elapsed=%.3fs name=%s", perf_counter() - start, self.name)
+
+    @classmethod
+    def from_yaml(cls, yaml_path: str | Path) -> "Agent":
+        load_start = perf_counter()
+        definition = _load_agent_definition_from_file(Path(yaml_path))
+        logger.info("agent.load_yaml elapsed=%.3fs name=%s", perf_counter() - load_start, definition.name)
+        return cls(definition)
 
     @staticmethod
     def _resolve_handler(handler_path: str) -> Any:
