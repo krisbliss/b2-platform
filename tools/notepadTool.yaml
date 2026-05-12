@@ -1,0 +1,13 @@
+# tools/notepadTool.yaml
+name: notepad_tool
+description: "Opens a text editor (notepad) for writing and editing notes"
+input_schema:
+  type: object
+  properties:
+    filename:
+      type: string
+      description: "Optional filename to open or create (if not provided, opens blank notepad)"
+  required: []
+implementation:
+  type: function
+  handler: tools.notepad_tool.open_notepad

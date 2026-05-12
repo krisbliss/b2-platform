@@ -1,0 +1,6 @@
+# skills/example_skill.yaml
+name: example_skill
+description: "A simple example skill for demonstration purposes"
+
+prompt: |
+  Keep answers concise and practical.

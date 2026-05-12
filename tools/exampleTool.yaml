@@ -1,0 +1,13 @@
+# tools/example_tool.yaml
+name: example_tool
+description: "A simple example tool for demonstration purposes"
+input_schema:
+  type: object
+  properties:
+    value:
+      type: string
+      description: "A sample input value for the example tool"
+  required: []
+implementation:
+  type: function
+  handler: tools.example_tool.handle
