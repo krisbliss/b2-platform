@@ -1,0 +1,73 @@
+thresholds:
+  clear_fail: 0.8
+  clear_pass: 0.2
+
+gemini:
+  enabled: true
+
+checks:
+  - id: exif
+    enabled: true
+    early_exit_on_fail: false
+    params:
+      no_exif_confidence: 0.2
+
+  - id: ela
+    enabled: true
+    early_exit_on_fail: false
+    params:
+      threshold: 4.0
+      document_threshold: 8.0
+
+  - id: cnn_deepfake
+    enabled: true
+    early_exit_on_fail: false
+
+  - id: mrz
+    enabled: true
+    early_exit_on_fail: false
+
+  - id: ocr_document
+    enabled: true
+    early_exit_on_fail: false
+
+  - id: gemini_extract
+    enabled: true
+    early_exit_on_fail: false
+
+  - id: checksum
+    enabled: true
+    early_exit_on_fail: false
+    params: {}
+
+  - id: reverse_image
+    enabled: true
+    early_exit_on_fail: false
+    params:
+      timeout_seconds: 10.0
+      max_retries: 2
+      stock_domains:
+        - shutterstock.com
+        - gettyimages.com
+        - istockphoto.com
+        - adobe.com
+        - alamy.com
+        - pexels.com
+        - unsplash.com
+        - dreamstime.com
+      social_domains:
+        - facebook.com
+        - instagram.com
+        - x.com
+        - twitter.com
+        - tiktok.com
+        - linkedin.com
+        - reddit.com
+      news_domains:
+        - cnn.com
+        - bbc.com
+        - reuters.com
+        - apnews.com
+        - nytimes.com
+        - theguardian.com
+
