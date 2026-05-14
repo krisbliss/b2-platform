@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from tools.fake_image_detector.models import CheckResult
 
 
 class CheckContext(TypedDict, total=False):
-    pass
+    input_type: Literal["document", "face", "unknown"]
+    doc_type: str
+    country: str
+    extracted_fields: dict[str, str]
 
 
 class BaseCheck(ABC):

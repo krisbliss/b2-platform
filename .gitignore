@@ -27,3 +27,9 @@ Thumbs.db
 *.log
 
 *.sqlite3
+
+# GL-9: Fake / Staged Image Detector
+dummy/
+tools/fake_image_detector/local_samples/
+tools/fake_image_detector/models/
+tests/fixtures/dataset/

@@ -5,7 +5,18 @@ uvicorn[standard]>=0.30.0
 pydantic-settings>=2.3.0
 pydantic>=2.8.0
 pydantic-ai>=0.0.14
-google-genai>=0.3
-numpy>=1.26
+google-genai>=1.0.0
+numpy>=1.26.0
 pyyaml>=6.0
 python-dotenv>=1.0
+
+# GL-9: Fake / Staged Image Detector
+pillow>=10.0.0
+pillow-heif>=0.18.0
+piexif>=1.1.3
+pytesseract>=0.3.10
+passporteye>=2.2.0
+google-cloud-aiplatform>=1.50.0
+google-cloud-vision>=3.7.0
+httpx>=0.27.0
+onnxruntime>=1.18.0
