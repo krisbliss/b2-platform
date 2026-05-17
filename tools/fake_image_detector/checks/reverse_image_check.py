@@ -5,7 +5,19 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from tools.fake_image_detector.checks.base_check import BaseCheck, CheckContext
-from tools.fake_image_detector.models import CheckResult, NormalizedSignals
+from tools.fake_image_detector.models import (
+    CheckResult,
+    GL9_FLAG_FOUND_ONLINE,
+    GL9_FLAG_POSSIBLE_STOCK,
+    GL9_HARD_ESCALATION_FLAGS,
+    NormalizedSignals,
+)
+
+_FLAG_ALIASES = {
+    "FOUND_ONLINE_REUSE": GL9_FLAG_FOUND_ONLINE,
+    "STOCK_PHOTO_REUSE": GL9_FLAG_POSSIBLE_STOCK,
+    "STOCK_PHOTO_INDICATORS": GL9_FLAG_POSSIBLE_STOCK,
+}
 
 
 @dataclass
@@ -163,30 +175,40 @@ class ReverseImageCheck(BaseCheck):
             )
 
         if has_stock:
-            return self._fail_result(result, confidence, 1.0, "STOCK_PHOTO_REUSE", domains)
+            return self._fail_result(result, confidence, 1.0, [GL9_FLAG_POSSIBLE_STOCK], domains)
         if has_gov:
-            return self._fail_result(result, confidence, 0.8, "OFFICIAL_DOCUMENT_REUSE", domains)
+            return self._fail_result(result, confidence, 0.8, ["OFFICIAL_DOCUMENT_REUSE"], domains)
         if has_social or has_news:
-            return self._fail_result(result, confidence, 0.9, "FOUND_ONLINE_REUSE", domains)
+            return self._fail_result(result, confidence, 0.9, [GL9_FLAG_FOUND_ONLINE], domains)
         if result.exact_count > 0:
-            return self._fail_result(result, confidence, 0.75, "FOUND_ONLINE", domains)
+            return self._fail_result(result, confidence, 0.75, [GL9_FLAG_FOUND_ONLINE], domains)
 
-        return self._fail_result(result, confidence, 0.4, "SIMILAR_IMAGE_FOUND", domains)
+        return self._fail_result(result, confidence, 0.4, ["SIMILAR_IMAGE_FOUND"], domains)
+
+    def _normalize_flags(self, flags: list[str]) -> list[str]:
+        canonical: list[str] = []
+        for flag in flags:
+            normalized = _FLAG_ALIASES.get(flag, flag)
+            if normalized not in canonical:
+                canonical.append(normalized)
+        return canonical
 
     def _fail_result(
         self,
         result: _VisionResult,
         confidence: float,
         fake_score: float,
-        flag: str,
+        flags: list[str],
         domains: list[str],
     ) -> CheckResult:
+        normalized_flags = self._normalize_flags(flags)
+        escalation_reasons = [f"{flag} detected by reverse_image check" for flag in normalized_flags if flag in GL9_HARD_ESCALATION_FLAGS]
         return CheckResult(
             check=self.check_id,
             passed=False,
             fake_score=round(fake_score, 3),
             confidence=confidence,
-            flags=[flag],
+            flags=normalized_flags,
             signals={
                 "provider": "google_vision_web_detection",
                 "exact_count": result.exact_count,
@@ -196,9 +218,11 @@ class ReverseImageCheck(BaseCheck):
             normalized_signals=NormalizedSignals(
                 category="staging",
                 confidence=confidence,
-                indicators=[flag],
+                indicators=normalized_flags,
                 staging_score=round(fake_score, 3),
             ),
+            human_escalate=bool(escalation_reasons),
+            escalation_reasons=escalation_reasons,
         )
 
     def _domain_from_url(self, value: str) -> str:

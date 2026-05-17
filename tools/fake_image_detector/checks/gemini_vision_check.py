@@ -6,7 +6,15 @@ import os
 import re
 
 from tools.fake_image_detector.checks.base_check import BaseCheck
-from tools.fake_image_detector.models import CheckResult, NormalizedSignals
+from tools.fake_image_detector.models import (
+    CheckResult,
+    GL9_FLAG_AGE_INCONSISTENCY,
+    GL9_FLAG_EDITING_ARTIFACTS,
+    GL9_FLAG_FOUND_ONLINE,
+    GL9_FLAG_POSSIBLE_STOCK,
+    GL9_HARD_ESCALATION_FLAGS,
+    NormalizedSignals,
+)
 
 _PHOTO_PROMPT = """You are a fraud-detection assistant. Analyze this image and assess whether it is a genuine, original photograph submitted by a real person, or whether it is deceptive in any of the following ways:
 
@@ -26,9 +34,9 @@ Respond ONLY with valid JSON matching this schema:
   "confidence": <float 0.0-1.0, how certain you are about your assessment>,
   "estimated_age": <integer or null, estimated age of the primary subject in years, null if no person is visible>,
   "signals": [<list of short specific observed-indicator strings, e.g. "skin texture too smooth", "background composited", "subject appears 40+ years old">],
-  "flags": [<zero or more from: GAN_ARTIFACTS, DIFFUSION_ARTIFACTS, EDITING_DETECTED,
+  "flags": [<zero or more from: GAN_ARTIFACTS, DIFFUSION_ARTIFACTS, EDITING_ARTIFACTS,
              INCONSISTENT_LIGHTING, UNNATURAL_TEXTURE, BACKGROUND_INCONSISTENCY,
-             STOCK_PHOTO_INDICATORS, STAGING_ARTIFACTS, METADATA_MISMATCH, AGE_INCONSISTENCY, CLEAN>]
+             POSSIBLE_STOCK, STAGING_ARTIFACTS, METADATA_MISMATCH, AGE_INCONSISTENCY, CLEAN>]
 }
 Do not include any text outside the JSON object."""
 
@@ -52,7 +60,7 @@ Respond ONLY with valid JSON matching this schema:
   "fake_likelihood": <float 0.0-1.0, probability the document is not genuine>,
   "confidence": <float 0.0-1.0, how certain you are about your assessment>,
   "signals": [<list of short specific observed-indicator strings, e.g. "no visible hologram", "font inconsistency on expiry date", "document language does not match issuing country">],
-  "flags": [<zero or more from: FORGED_DOCUMENT, PHOTO_OF_PHOTO, EDITING_DETECTED,
+  "flags": [<zero or more from: FORGED_DOCUMENT, PHOTO_OF_PHOTO, EDITING_ARTIFACTS,
              TEMPLATE_DETECTED, INCONSISTENT_SECURITY_FEATURES, LANGUAGE_INCONSISTENCY, CLEAN>]
 }}
 Do not include any text outside the JSON object.\
@@ -61,6 +69,22 @@ Do not include any text outside the JSON object.\
 # Strip optional markdown code fences Gemini sometimes wraps around JSON
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 _SAFE_TOKEN_RE = re.compile(r"[^a-zA-Z0-9 _-]+")
+
+_FLAG_ALIASES = {
+    "EDITING_DETECTED": GL9_FLAG_EDITING_ARTIFACTS,
+    "STOCK_PHOTO_INDICATORS": GL9_FLAG_POSSIBLE_STOCK,
+    "STOCK_PHOTO_REUSE": GL9_FLAG_POSSIBLE_STOCK,
+    "FOUND_ONLINE_REUSE": GL9_FLAG_FOUND_ONLINE,
+}
+
+_EDITING_SOURCE_FLAGS = {
+    "GAN_ARTIFACTS",
+    "DIFFUSION_ARTIFACTS",
+    "INCONSISTENT_LIGHTING",
+    "UNNATURAL_TEXTURE",
+    "BACKGROUND_INCONSISTENCY",
+    "METADATA_MISMATCH",
+}
 
 
 def _sanitize_doc_type(value: object) -> str:
@@ -88,6 +112,22 @@ def _sniff_mime(image_bytes: bytes) -> str:
     if len(image_bytes) >= 12 and image_bytes[8:12] == b"WEBP":
         return "image/webp"
     return "image/jpeg"
+
+
+def _normalize_flags(raw_flags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for raw_flag in raw_flags:
+        canonical = _FLAG_ALIASES.get(raw_flag, raw_flag)
+        if canonical not in normalized:
+            normalized.append(canonical)
+
+    if any(flag in _EDITING_SOURCE_FLAGS for flag in normalized):
+        if GL9_FLAG_EDITING_ARTIFACTS not in normalized:
+            normalized.append(GL9_FLAG_EDITING_ARTIFACTS)
+
+    # AGE_INCONSISTENCY is already canonical; keep it if present and avoid duplicate insertions.
+
+    return normalized
 
 
 class GeminiVisionCheck(BaseCheck):
@@ -196,9 +236,14 @@ class GeminiVisionCheck(BaseCheck):
         fake_likelihood = max(0.0, min(1.0, float(data.get("fake_likelihood", 0.0))))
         gemini_confidence = max(0.0, min(1.0, float(data.get("confidence", 0.0))))
         is_deceptive = bool(data.get("is_deceptive", data.get("is_synthetic", False)))
-        flags = [str(f) for f in data.get("flags", [])]
+        flags = _normalize_flags([str(f) for f in data.get("flags", [])])
         raw_age = data.get("estimated_age")
         estimated_age = int(raw_age) if raw_age is not None else None
+        escalation_reasons = [
+            f"{flag} detected by gemini_vision check"
+            for flag in flags
+            if flag in GL9_HARD_ESCALATION_FLAGS
+        ]
         signals = {
             "doc_type": safe_doc_type if doc_type else None,
             "country": safe_country if doc_type else "",
@@ -223,7 +268,9 @@ class GeminiVisionCheck(BaseCheck):
                 synthetic_score=round(fake_likelihood, 3) if not doc_type else None,
                 manipulation_score=round(fake_likelihood, 3),
                 staging_score=round(fake_likelihood, 3) if any(
-                    f in {"STAGING_ARTIFACTS", "STOCK_PHOTO_INDICATORS"} for f in flags
+                    f in {"STAGING_ARTIFACTS", GL9_FLAG_POSSIBLE_STOCK} for f in flags
                 ) else None,
             ),
+            human_escalate=bool(escalation_reasons),
+            escalation_reasons=escalation_reasons,
         )

@@ -63,10 +63,29 @@ class TestGeminiVisionCheck:
         assert result.fake_score == 0.87
         assert result.confidence == 0.87
         assert "GAN_ARTIFACTS" in result.flags
+        assert "EDITING_ARTIFACTS" in result.flags
+        assert result.human_escalate is False
         assert result.signals["is_deceptive"] is True
         assert result.normalized_signals is not None
         assert result.normalized_signals.category == "synthetic"
         assert result.normalized_signals.synthetic_score == 0.87
+
+    def test_possible_stock_flag_triggers_hard_escalation(self):
+        _install_mock_genai(json.dumps({
+            "is_deceptive": True,
+            "fake_likelihood": 0.7,
+            "confidence": 0.8,
+            "signals": ["looks like stock imagery"],
+            "flags": ["STOCK_PHOTO_INDICATORS"],
+        }))
+        try:
+            result = run(GeminiVisionCheck(project="test-project").run(_jpeg_bytes(), {}))
+        finally:
+            _remove_mock_genai()
+
+        assert "POSSIBLE_STOCK" in result.flags
+        assert result.human_escalate is True
+        assert any("POSSIBLE_STOCK" in reason for reason in result.escalation_reasons)
 
     def test_passes_real_image(self):
         _install_mock_genai(json.dumps({

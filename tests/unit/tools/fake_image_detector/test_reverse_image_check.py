@@ -35,7 +35,8 @@ class TestReverseImageCheck:
 
         assert result.passed is False
         assert result.fake_score == 1.0
-        assert "STOCK_PHOTO_REUSE" in result.flags
+        assert "POSSIBLE_STOCK" in result.flags
+        assert result.human_escalate is True
         assert result.normalized_signals is not None
         assert result.normalized_signals.category == "staging"
 
@@ -51,6 +52,7 @@ class TestReverseImageCheck:
 
         assert result.passed is False
         assert "FOUND_ONLINE" in result.flags
+        assert result.human_escalate is True
         assert result.signals["provider"] == "google_vision_web_detection"
 
     def test_search_failure_returns_skipped_unavailable(self):
