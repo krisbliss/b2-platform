@@ -15,6 +15,7 @@ _PHOTO_PROMPT = """You are a fraud-detection assistant. Analyze this image and a
 3. STAGED or STOCK — a professional shoot, stock image, or heavily posed photo unlikely to be a genuine personal submission.
 4. BACKGROUND INCONSISTENCY — background does not match the subject (composited, greenscreen, mismatched lighting).
 5. LIGHTING or SHADOW INCONSISTENCY — light sources or shadows are inconsistent across the image.
+6. AGE INCONSISTENCY — the estimated age of the subject does not match the age that would be expected for a genuine personal submission (e.g. the photo appears to show a much older or younger person than the context suggests).
 
 Do NOT make a final verdict. Report only the signals you observe.
 
@@ -23,10 +24,11 @@ Respond ONLY with valid JSON matching this schema:
   "is_deceptive": <bool, true if the image is AI-generated, manipulated, staged, or otherwise not a genuine personal photo>,
   "fake_likelihood": <float 0.0-1.0, probability the image is deceptive>,
   "confidence": <float 0.0-1.0, how certain you are about your assessment>,
-  "signals": [<list of short specific observed-indicator strings, e.g. "skin texture too smooth", "background composited">],
+  "estimated_age": <integer or null, estimated age of the primary subject in years, null if no person is visible>,
+  "signals": [<list of short specific observed-indicator strings, e.g. "skin texture too smooth", "background composited", "subject appears 40+ years old">],
   "flags": [<zero or more from: GAN_ARTIFACTS, DIFFUSION_ARTIFACTS, EDITING_DETECTED,
              INCONSISTENT_LIGHTING, UNNATURAL_TEXTURE, BACKGROUND_INCONSISTENCY,
-             STOCK_PHOTO_INDICATORS, STAGING_ARTIFACTS, METADATA_MISMATCH, CLEAN>]
+             STOCK_PHOTO_INDICATORS, STAGING_ARTIFACTS, METADATA_MISMATCH, AGE_INCONSISTENCY, CLEAN>]
 }
 Do not include any text outside the JSON object."""
 
@@ -40,6 +42,7 @@ Assess whether this appears to be a GENUINE, AUTHENTIC document or whether it is
 3. DIGITALLY MANIPULATED — an authentic document with altered fields (name, date, number).
 4. TEMPLATE DETECTED — produced from an online template without official security features.
 5. INCONSISTENT SECURITY FEATURES — missing expected holograms, watermarks, or official markings.
+6. LANGUAGE INCONSISTENCY — the language or script used in the document does not match what is expected for the claimed country or document type (e.g. an English-only passport from a non-English-issuing country, mismatched official seals or text).
 
 Do NOT make a final verdict. Report only the signals you observe.
 
@@ -48,9 +51,9 @@ Respond ONLY with valid JSON matching this schema:
   "is_deceptive": <bool, true if the document appears forged, altered, or not genuine>,
   "fake_likelihood": <float 0.0-1.0, probability the document is not genuine>,
   "confidence": <float 0.0-1.0, how certain you are about your assessment>,
-  "signals": [<list of short specific observed-indicator strings, e.g. "no visible hologram", "font inconsistency on expiry date">],
+  "signals": [<list of short specific observed-indicator strings, e.g. "no visible hologram", "font inconsistency on expiry date", "document language does not match issuing country">],
   "flags": [<zero or more from: FORGED_DOCUMENT, PHOTO_OF_PHOTO, EDITING_DETECTED,
-             TEMPLATE_DETECTED, INCONSISTENT_SECURITY_FEATURES, CLEAN>]
+             TEMPLATE_DETECTED, INCONSISTENT_SECURITY_FEATURES, LANGUAGE_INCONSISTENCY, CLEAN>]
 }}
 Do not include any text outside the JSON object.\
 """
@@ -194,10 +197,13 @@ class GeminiVisionCheck(BaseCheck):
         gemini_confidence = max(0.0, min(1.0, float(data.get("confidence", 0.0))))
         is_deceptive = bool(data.get("is_deceptive", data.get("is_synthetic", False)))
         flags = [str(f) for f in data.get("flags", [])]
+        raw_age = data.get("estimated_age")
+        estimated_age = int(raw_age) if raw_age is not None else None
         signals = {
             "doc_type": safe_doc_type if doc_type else None,
             "country": safe_country if doc_type else "",
             "is_deceptive": is_deceptive,
+            "estimated_age": estimated_age,
             "signals": data.get("signals", []),
         }
 
