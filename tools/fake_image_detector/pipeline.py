@@ -15,7 +15,13 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from tools.fake_image_detector.checks.base_check import BaseCheck
 from tools.fake_image_detector.config_loader import PipelineConfig, load_pipeline_config
-from tools.fake_image_detector.models import CheckResult, Escalation, ToolResult, Verdict
+from tools.fake_image_detector.models import (
+    CheckResult,
+    Escalation,
+    GL9_HARD_ESCALATION_FLAGS,
+    ToolResult,
+    Verdict,
+)
 
 InputType = Literal["document", "face", "unknown"]
 
@@ -108,6 +114,19 @@ class FakeImageDetectorPipeline:
 
             results.append(result)
 
+            if self._should_force_human_escalation(result):
+                return ToolResult(
+                    verdict=Verdict.FLAG,
+                    risk_score=round(max(self._config.clear_pass, result.fake_score), 4),
+                    escalation=Escalation.HUMAN_REVIEW,
+                    checks=results,
+                    early_exit=True,
+                    early_exit_reason=(
+                        f"{check_cfg.id} triggered hard escalation: "
+                        f"{self._hard_escalation_flags(result.flags)}"
+                    ),
+                )
+
             if check_cfg.early_exit_on_fail and not result.passed and not result.skipped:
                 risk_score = result.fake_score
                 verdict, escalation = self._classify(risk_score)
@@ -165,6 +184,19 @@ class FakeImageDetectorPipeline:
             )
 
         final_risk = result.fake_score
+        if self._should_force_human_escalation(result):
+            return ToolResult(
+                verdict=Verdict.FLAG,
+                risk_score=round(max(self._config.clear_pass, final_risk), 4),
+                escalation=Escalation.HUMAN_REVIEW,
+                checks=stage1.checks + [result],
+                early_exit=True,
+                early_exit_reason=(
+                    "gemini_vision triggered hard escalation: "
+                    f"{self._hard_escalation_flags(result.flags)}"
+                ),
+            )
+
         verdict, escalation = self._classify(final_risk)
 
         return ToolResult(
@@ -185,6 +217,14 @@ class FakeImageDetectorPipeline:
             # Fail-safe: checks ran but produced no usable confidence → force human review band.
             return round(min(self._config.clear_fail, self._config.clear_pass + 0.01), 4)
         return round(sum(r.fake_score * r.confidence for r in active) / total_weight, 4)
+
+    def _hard_escalation_flags(self, flags: list[str]) -> list[str]:
+        return [flag for flag in flags if flag in GL9_HARD_ESCALATION_FLAGS]
+
+    def _should_force_human_escalation(self, result: CheckResult) -> bool:
+        if result.human_escalate:
+            return True
+        return bool(self._hard_escalation_flags(result.flags))
 
     def _classify(self, risk_score: float) -> tuple[Verdict, Escalation]:
         if risk_score >= self._config.clear_fail:

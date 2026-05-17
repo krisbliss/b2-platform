@@ -35,9 +35,11 @@ def _pipeline(
 def _passing(check_id: str) -> CheckResult:
     return CheckResult(check=check_id, passed=True, fake_score=0.0, confidence=0.8)
 
+
 def _ambiguous(check_id: str) -> CheckResult:
     # score = 0.5*0.8 / 0.8 = 0.5 → ambiguous zone [0.2, 0.8)
     return CheckResult(check=check_id, passed=False, fake_score=0.5, confidence=0.8)
+
 
 def _failing(check_id: str) -> CheckResult:
     # score = 1.0*0.9 / 0.9 = 1.0 → clear fail ≥ 0.8
@@ -82,6 +84,26 @@ def test_check_runtime_error_flags_immediately():
     assert result.escalation == Escalation.HUMAN_REVIEW
     assert result.early_exit is True
     assert "CHECK_RUNTIME_ERROR" in result.checks[0].flags
+
+
+def test_hard_escalation_flag_forces_human_review_before_score_classification():
+    reverse_image = _StubCheck(
+        CheckResult(
+            check="reverse_image",
+            passed=False,
+            fake_score=0.95,
+            confidence=0.95,
+            flags=["FOUND_ONLINE"],
+            human_escalate=True,
+            escalation_reasons=["FOUND_ONLINE detected by reverse_image check"],
+        )
+    )
+    p = _pipeline([(_cfg("reverse_image"), reverse_image)])
+    result = run(p.run(b"img", {"input_type": "face"}))
+    assert result.early_exit is True
+    assert result.verdict == Verdict.FLAG
+    assert result.escalation == Escalation.HUMAN_REVIEW
+    assert "hard escalation" in (result.early_exit_reason or "")
 
 
 def test_early_exit_on_fail_uses_fake_score():
@@ -131,14 +153,24 @@ def test_gemini_skipped_returns_stage1_with_skip_record():
     assert any(r.check == "gemini_vision" and r.skipped for r in result.checks)
 
 
-def test_gemini_fake_score_drives_final_verdict():
+def test_gemini_hard_escalation_overrides_clear_reject():
     ela = _StubCheck(_ambiguous("ela"))
-    gemini = _StubCheck(CheckResult(check="gemini_vision", passed=False, fake_score=0.85, confidence=0.87, flags=["GAN_ARTIFACTS"]))
+    gemini = _StubCheck(
+        CheckResult(
+            check="gemini_vision",
+            passed=False,
+            fake_score=0.95,
+            confidence=0.95,
+            flags=["POSSIBLE_STOCK"],
+            human_escalate=True,
+            escalation_reasons=["POSSIBLE_STOCK detected by gemini_vision check"],
+        )
+    )
     p = _pipeline([(_cfg("ela"), ela)], gemini_check=gemini)
     result = run(p.run(b"img", {"input_type": "face"}))
-    assert result.verdict == Verdict.REJECT
-    assert result.escalation == Escalation.AUTO_REJECT
-    assert result.risk_score == 0.85
+    assert result.verdict == Verdict.FLAG
+    assert result.escalation == Escalation.HUMAN_REVIEW
+    assert result.early_exit is True
 
 
 def test_gemini_real_verdict_overrides_ambiguous_stage1():
