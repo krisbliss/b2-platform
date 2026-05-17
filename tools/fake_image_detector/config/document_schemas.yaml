@@ -1,0 +1,157 @@
+# Document type detection keywords used by the OCR check.
+# The check scans extracted text for these keywords to classify the document type.
+# If keywords are found but the type is not listed here, the check flags UNRECOGNIZED_DOCUMENT_TYPE.
+# If no keywords are found at all, the check is skipped (image is not a document).
+
+detection_keywords:
+  passport:
+    - "passport"
+    - "reisepass"
+    - "passeport"
+    - "pasaporte"
+  national_id:
+    - "identity card"
+    - "national id"
+    - "personalausweis"
+    - "carte nationale"
+    - "cedula"
+  birth_certificate:
+    - "birth certificate"
+    - "certificate of birth"
+    - "geburtsurkunde"
+    - "acte de naissance"
+  death_certificate:
+    - "death certificate"
+    - "certificate of death"
+    - "sterbeurkunde"
+  driving_license:
+    - "driving licence"
+    - "driver's license"
+    - "führerschein"
+    - "permis de conduire"
+  bank_statement:
+    - "bank statement"
+    - "account statement"
+    - "IBAN"
+
+# Field validation schemas per document type.
+# Structure: doc_type -> country (or "base") -> required_fields[]
+# "base" is used when the country is unknown or not listed.
+# Each field has a "name" (case-insensitive substring match), optional "regex",
+# and optional "checksum" algorithm key ("mrz", "luhn", "iban", or null).
+
+schemas:
+  passport:
+    base:
+      required_fields:
+        - name: "Document Number"
+          regex: "[A-Z0-9]{6,9}"
+          checksum: null
+        - name: "Date of Birth"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+        - name: "Expiry"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+    DE:
+      required_fields:
+        - name: "Pass-Nr"
+          regex: "[A-Z0-9]{9}"
+          checksum: null
+        - name: "Geburtsdatum"
+          regex: "\\d{2}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+        - name: "Ablaufdatum"
+          regex: "\\d{2}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+    KE:
+      required_fields:
+        - name: "Republic of Kenya"
+          regex: null
+          checksum: null
+        - name: "Passport No"
+          regex: "[A-Z]{1}[0-9]{7}"
+          checksum: null
+    NG:
+      required_fields:
+        - name: "Federal Republic of Nigeria"
+          regex: null
+          checksum: null
+        - name: "Passport No"
+          regex: "[A-Z]{1}[0-9]{8}"
+          checksum: null
+
+  national_id:
+    base:
+      required_fields:
+        - name: "Identity"
+          regex: null
+          checksum: null
+        - name: "Date of Birth"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+    DE:
+      required_fields:
+        - name: "Personalausweis"
+          regex: null
+          checksum: null
+        - name: "Geburtsdatum"
+          regex: null
+          checksum: null
+    KE:
+      required_fields:
+        - name: "National Identity Card"
+          regex: null
+          checksum: null
+        - name: "ID No"
+          regex: "[0-9]{7,8}"
+          checksum: null
+
+  birth_certificate:
+    base:
+      required_fields:
+        - name: "Name"
+          regex: null
+          checksum: null
+        - name: "Date of Birth"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+        - name: "Place of Birth"
+          regex: null
+          checksum: null
+
+  death_certificate:
+    base:
+      required_fields:
+        - name: "Name"
+          regex: null
+          checksum: null
+        - name: "Date of Death"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+        - name: "Place of Death"
+          regex: null
+          checksum: null
+
+  driving_license:
+    base:
+      required_fields:
+        - name: "Licence No"
+          regex: "[A-Z0-9]{5,15}"
+          checksum: null
+        - name: "Date of Birth"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+        - name: "Expiry"
+          regex: "\\d{2,4}[.\\-/]\\d{2}[.\\-/]\\d{2,4}"
+          checksum: null
+
+  bank_statement:
+    base:
+      required_fields:
+        - name: "IBAN"
+          regex: "[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}"
+          checksum: "iban"
+        - name: "Account"
+          regex: null
+          checksum: null
