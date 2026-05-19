@@ -1,0 +1,80 @@
+# PII Scrubber Configuration
+# Modify this file to change detection behaviour without touching Python code.
+# All entity names must match Presidio's built-in recognizer registry.
+
+scrubber:
+  score_threshold: 0.5   # detections below this confidence are ignored
+  max_retries: 3
+  retry_timeout_ms: 200
+  language: en
+
+# Phase 1 (pilot): regex-only entities — no spaCy NER required.
+# Phase 2: set recognizer: ner and enabled: true for name/location detection.
+entities:
+  - name: PHONE_NUMBER
+    enabled: true
+    recognizer: regex
+    allow_list: []
+    deny_list: []
+
+  - name: EMAIL_ADDRESS
+    enabled: true
+    recognizer: regex
+    allow_list: []
+    deny_list: []
+
+  - name: CREDIT_CARD
+    enabled: true
+    recognizer: regex
+    allow_list: []
+    deny_list: []
+
+  - name: IBAN_CODE
+    enabled: true
+    recognizer: regex
+    allow_list: []
+    deny_list: []
+
+  - name: IP_ADDRESS
+    enabled: true
+    recognizer: regex
+    allow_list: []
+    deny_list: []
+
+  # Phase 2 -- NER-backed entities (disabled for pilot)
+  # Populate allow_list with domain terms to prevent false positives.
+  - name: PERSON
+    enabled: false
+    recognizer: ner
+    allow_list:
+      - Maize
+      - Sorghum
+      - Fresian
+    deny_list: []
+
+  - name: LOCATION
+    enabled: false
+    recognizer: ner
+    allow_list:
+      - Kenya
+      - Nairobi
+      - Senegal
+      - Dakar
+      - Indonesia
+      - Jakarta
+    deny_list: []
+
+# NLP engine -- only loaded when at least one entity has recognizer: ner.
+# To upgrade: change model_name and run: python -m spacy download <model>
+# Options: en_core_web_sm (12MB), en_core_web_lg (741MB), xx_ent_wiki_sm (multilingual)
+nlp_engine:
+  provider: spacy
+  model_name: en_core_web_sm
+
+# Audit store -- isolated, never read by the Agentic OS.
+# store_originals: true  = pilot mode (raw values kept for identity recovery)
+# store_originals: false = production (hashes only; GL-20 adds encryption)
+audit_store:
+  memory_ttl_hours: 24
+  file_path: data/pii_audit.jsonl
+  store_originals: true
