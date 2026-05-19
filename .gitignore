@@ -2,6 +2,7 @@
 .env
 *.env
 .env.local
+b2p/
 
 # Python
 __pycache__/
@@ -27,6 +28,12 @@ Thumbs.db
 *.log
 
 *.sqlite3
+
+# GL-1: PII audit runtime files (never commit — contain original PII values)
+data/*.jsonl
+
+# Graphify
+graphify-out/
 
 # GL-9: Fake / Staged Image Detector
 dummy/
