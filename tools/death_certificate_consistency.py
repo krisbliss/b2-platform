@@ -200,7 +200,7 @@ def analyze_death_certificate_consistency(
     if not gemini_api_key:
         raise ValueError("GEMINI_API_KEY is required for Gemini calls")
 
-    gemini_model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model = model or os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
 
     genai, gentypes = _load_vertex_client()
     client = genai.Client(api_key=gemini_api_key)
