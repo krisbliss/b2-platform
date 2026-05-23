@@ -449,7 +449,8 @@ class TestFailOpen:
         audit_store.record(msg.session_id, result)
 
         assert result.scrub_failed is True
-        assert result.clean_message.text_content == raw
+        # text_content is nulled — unscanned PII must not reach the Agentic OS
+        assert result.clean_message.text_content is None
         assert not result.found_pii
 
 

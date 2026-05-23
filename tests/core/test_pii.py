@@ -658,10 +658,15 @@ class TestRetryLoop:
         result = scrubber.scrub(sample_message)
         assert result.scrub_failed is True
         assert result.failure_reason is not None
-        assert result.clean_message is sample_message  # original message passed through
+        # text_content is nulled — unscanned PII must not reach the Agentic OS
+        assert result.clean_message is not sample_message
+        assert result.clean_message.text_content is None
+        # Non-text fields are safe to preserve
+        assert result.clean_message.session_id == sample_message.session_id
+        assert result.clean_message.channel == sample_message.channel
         assert not result.found_pii
 
-    def test_fail_open_preserves_original_message(
+    def test_fail_open_nulls_text_content_to_block_unscanned_pii(
         self,
         minimal_config: PiiConfig,
         sample_message: CanonicalMessage,
@@ -673,8 +678,12 @@ class TestRetryLoop:
 
         result = scrubber.scrub(sample_message)
         assert result.scrub_failed
-        # Critically: the message that enters the OS is the original, unmodified envelope
-        assert result.clean_message.text_content == sample_message.text_content
+        # text_content is nulled so unscanned PII cannot reach the Agentic OS
+        assert result.clean_message.text_content is None
+        # Structural fields that carry no free-text PII are preserved
+        assert result.clean_message.input_type == sample_message.input_type
+        assert result.clean_message.language_hint == sample_message.language_hint
+        assert result.clean_message.location_context == sample_message.location_context
 
     def test_timeout_stops_retry_loop_early(
         self,

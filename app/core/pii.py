@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+from dataclasses import replace
 
 if TYPE_CHECKING:
     from app.core.envelope import CanonicalMessage
@@ -288,16 +289,17 @@ class PiiScrubber:
         logger.error(
             "pii.scrub fail_open retries=%d kind=%s", self._config.max_retries, last_kind
         )
+        # Null out text_content so unscanned PII never reaches the Agentic OS.
+        # All other fields (location, language, submission type) are safe to pass
+        # through — they contain no free-text PII.
         return ScrubResult(
-            clean_message=message,
+            clean_message=replace(message, text_content=None),
             entities=[],
             scrub_failed=True,
             failure_reason=f"{last_kind}: {last_exc}",
         )
 
     def _do_scrub(self, message: CanonicalMessage) -> ScrubResult:
-        from dataclasses import replace
-
         all_entities: list[PiiEntity] = []
         enabled = self._config.enabled_entity_names
 
