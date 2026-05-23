@@ -6,14 +6,13 @@ import json
 import logging
 import time
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from dataclasses import replace
 
 if TYPE_CHECKING:
     from app.core.envelope import CanonicalMessage
