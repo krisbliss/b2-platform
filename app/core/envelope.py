@@ -141,7 +141,9 @@ class CanonicalMessage:
 
         prompt: dict[str, Any] = {"input_type": self.input_type}
 
-        if self.text_content is not None:
+        # Defense-in-depth: drop text_content if it still contains a phone number
+        # (e.g. if the PII scrubber failed open before this point was reached).
+        if self.text_content is not None and not _contains_phone_number(self.text_content):
             prompt["text_content"] = self.text_content
         if self.language_hint is not None:
             prompt["language_hint"] = self.language_hint

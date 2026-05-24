@@ -219,6 +219,35 @@ def test_agent_prompt_excludes_media_url() -> None:
     assert "media_url" not in prompt
 
 
+def test_agent_prompt_drops_text_content_containing_phone_number() -> None:
+    # Defense-in-depth: if PII scrubbing failed open and a phone slipped through,
+    # to_agent_prompt() must not forward it to the LLM.
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        text_content="Call me at +1 555 010 1234 for details.",
+    )
+
+    prompt = message.to_agent_prompt()
+
+    assert "text_content" not in prompt
+
+
+def test_agent_prompt_includes_clean_text_content_without_phone_number() -> None:
+    # Scrubbed text (phone replaced with placeholder) must still pass through.
+    message = CanonicalMessage(
+        session_id="session-123",
+        channel="sms",
+        input_type=InputType.TEXT,
+        text_content="Call me at [PHONE_NUMBER_3f8a2b1c] for details.",
+    )
+
+    prompt = message.to_agent_prompt()
+
+    assert prompt["text_content"] == "Call me at [PHONE_NUMBER_3f8a2b1c] for details."
+
+
 def test_agent_prompt_includes_safe_location_fields_when_location_context_exists() -> None:
     message = CanonicalMessage(
         session_id="session-123",
