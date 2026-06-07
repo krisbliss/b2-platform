@@ -25,7 +25,15 @@ from tools.fake_image_detector.models import (
 
 InputType = Literal["document", "face", "unknown"]
 
-_DOCUMENT_CHECK_IDS = {"exif", "ocr_document", "mrz", "gemini_extract", "checksum", "reverse_image"}
+_DOCUMENT_CHECK_IDS = {
+    "exif",
+    "ocr_document",
+    "mrz",
+    "gemini_extract",
+    "checksum",
+    "reverse_image",
+    "synthid",
+}
 _FACE_CHECK_IDS = {"exif", "ela", "cnn_deepfake", "reverse_image"}
 _DOC_TEXT_MIN_ALNUM = 25
 
@@ -286,6 +294,7 @@ def build_pipeline(config_path=None) -> FakeImageDetectorPipeline:
         ("gemini_extract", "tools.fake_image_detector.checks.gemini_extract_check", "GeminiExtractCheck"),
         ("checksum", "tools.fake_image_detector.checks.checksum_check", "ChecksumCheck"),
         ("reverse_image", "tools.fake_image_detector.checks.reverse_image_check", "ReverseImageCheck"),
+        ("synthid", "tools.fake_image_detector.checks.synthid_check", "VertexSynthIDCheck"),
     ):
         cls = _optional_check(module_name, class_name)
         if cls is not None:
