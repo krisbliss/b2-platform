@@ -150,12 +150,18 @@ class Agent:
 
     @classmethod
     def _build_gemini_model(cls, provider: dict[str, Any], model_name: str) -> tuple[GoogleModel, dict[str, Any]]:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY is required to run Gemini agents.")
+        project = provider.get("project") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = provider.get("location") or os.getenv("VERTEX_LOCATION", "us-central1")
 
         model_settings = cls._model_settings_from_provider(provider, model_name)
-        model = GoogleModel(model_name, provider=GoogleProvider(api_key=api_key))
+        model = GoogleModel(
+            model_name,
+            provider=GoogleProvider(
+                vertexai=True,
+                project=project,
+                location=location,
+            ),
+        )
         return model, model_settings
 
     @classmethod
