@@ -71,3 +71,10 @@ checks:
         - nytimes.com
         - theguardian.com
 
+  - id: synthid
+    enabled: true
+    early_exit_on_fail: false
+    params:
+      max_retries: 2
+      timeout_seconds: 20.0
+
