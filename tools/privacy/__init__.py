@@ -1,6 +1,6 @@
-"""Compatibility re-exports for the PII scrubber."""
+"""Privacy tools."""
 
-from tools.privacy.pii_scrubber import (
+from .pii_scrubber import (
     AuditStoreConfig,
     EntityConfig,
     NlpEngineConfig,
@@ -9,8 +9,6 @@ from tools.privacy.pii_scrubber import (
     PiiEntity,
     PiiScrubber,
     ScrubResult,
-    _classify_failure,
-    _FailureKind,
 )
 
 __all__ = [
@@ -22,6 +20,4 @@ __all__ = [
     "PiiEntity",
     "PiiScrubber",
     "ScrubResult",
-    "_classify_failure",
-    "_FailureKind",
 ]

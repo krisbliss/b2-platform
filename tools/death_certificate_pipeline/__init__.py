@@ -1,6 +1,6 @@
-"""Tools package."""
+"""Death certificate pipeline tools."""
 
-from .death_certificate_pipeline import (
+from .death_certificate_consistency import (
     analyze_death_certificate_consistency,
     analyze_death_certificate_consistency_base64,
 )
