@@ -1,0 +1,20 @@
+name: death_certificate_pipeline
+
+description: "Extracts death certificate facts and scores them against the claimant's chat history narrative."
+
+input_schema:
+  type: object
+  properties:
+    chat_history:
+      type: string
+      description: "Chat history containing the narrative claims to compare against the certificate."
+    image_bytes:
+      type: string
+      description: "Base64-encoded bytes of the death certificate image."
+  required:
+    - chat_history
+    - image_bytes
+
+implementation:
+  type: function
+  handler: tools.death_certificate_pipeline.death_certificate_consistency.analyze_death_certificate_consistency_base64
