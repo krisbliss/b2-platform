@@ -100,8 +100,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 async def _run_score(image_path: str, narrative: str, fields_json: str) -> None:
-    from poc.models import Submission
-    from poc.pipeline import run_pipeline
+    from tools.death_certificate_pipeline.models import Submission
+    from tools.death_certificate_pipeline.pipeline import run_pipeline
 
     try:
         case_fields = json.loads(fields_json)
