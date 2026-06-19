@@ -1,23 +1,29 @@
-"""Compatibility re-exports — canonical implementation at tools.privacy.pii_scrubber."""
+"""Privacy tools — import everything from here."""
 
-from tools.privacy.pii_scrubber import (  # noqa: F401
+from .pii_scrubber import (  # noqa: F401
     AuditStoreConfig,
     ContactIdentifierConfig,
     EncryptedPiiBuffer,
     EntityConfig,
     NlpEngineConfig,
     PiiAuditStore,
+    PiiBundleStore,
     PiiConfig,
+    PiiDeliveryChannel,
     PiiEntity,
     PiiScrubber,
     ScrubResult,
     SessionEntry,
     SessionRegistry,
     SessionState,
+    StubPiiDeliveryChannel,
     _classify_failure,
     _FailureKind,
     _make_contact_identifier,
     decrypt_audit_entry,
     encrypt_audit_entry,
+    graceful_shutdown,
     load_public_key,
+    run_sweeper,
+    startup_recovery,
 )

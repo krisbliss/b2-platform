@@ -3,7 +3,7 @@
 # All entity names must match Presidio's built-in recognizer registry.
 
 scrubber:
-  score_threshold: 0.5   # detections below this confidence are ignored
+  score_threshold: 0.35  # 0.35 catches standalone phone numbers (score ~0.40) without NER false positives
   max_retries: 3
   retry_timeout_ms: 200
   language: en
@@ -65,16 +65,30 @@ entities:
     deny_list: []
 
 # NLP engine -- only loaded when at least one entity has recognizer: ner.
-# To upgrade: change model_name and run: python -m spacy download <model>
-# Options: en_core_web_sm (12MB), en_core_web_lg (741MB), xx_ent_wiki_sm (multilingual)
 nlp_engine:
   provider: spacy
   model_name: en_core_web_sm
 
 # Audit store -- isolated, never read by the Agentic OS.
-# store_originals: true  = pilot mode (raw values kept for identity recovery)
-# store_originals: false = production (hashes only; GL-20 adds encryption)
+#
+# store_originals: false  (production default)
+#   original_value written only to encrypted audit log (gl_public_key_path required).
+#   Only GL can decrypt. B2 holds hashes only in plaintext file.
+#
+# store_originals: true  (POC/QA only)
+#   original_value written plaintext to file_path. Never use in production.
+#
+# gl_public_key_path: path to GL's RSA public key PEM file (gitignored).
+#   Without it, encrypted audit is disabled and original values are NOT stored.
 audit_store:
   memory_ttl_hours: 24
   file_path: data/pii_audit.jsonl
-  store_originals: true
+  store_originals: false
+  gl_public_key_path: null
+  encrypted_audit_path: data/pii_audit_encrypted.jsonl
+
+# Contact identifier (BLOCK-1) — stable pseudonymous join key for GiveLight.
+# The secret itself is NEVER stored in this file or in source control.
+# Set at deploy time:  export B2_PII_HMAC_SECRET=<random-256-bit-hex>
+contact_identifier:
+  hmac_secret_env_var: B2_PII_HMAC_SECRET
