@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 import importlib
-from inspect import Parameter, Signature
+from inspect import Parameter, Signature, iscoroutinefunction
 import logging
 import os
 from pathlib import Path
@@ -141,12 +141,18 @@ class Agent:
 
     @classmethod
     def _build_gemini_model(cls, provider: dict[str, Any], model_name: str) -> tuple[GoogleModel, dict[str, Any]]:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY is required to run Gemini agents.")
+        project = provider.get("project") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = provider.get("location") or os.getenv("VERTEX_LOCATION", "us-central1")
 
         model_settings = cls._model_settings_from_provider(provider, model_name)
-        model = GoogleModel(model_name, provider=GoogleProvider(api_key=api_key))
+        model = GoogleModel(
+            model_name,
+            provider=GoogleProvider(
+                vertexai=True,
+                project=project,
+                location=location,
+            ),
+        )
         return model, model_settings
 
     @classmethod
@@ -219,22 +225,48 @@ class Agent:
 
         handler = self._resolve_handler(handler_path)
 
-        def _tool_fn(**kwargs: Any) -> Any:
-            tool_start = perf_counter()
-            args = {key: value for key, value in kwargs.items() if value is not None}
-            logger.info("agent.tool_call start tool=%s args=%s", tool_def.name, args)
-            try:
-                result = handler(**args)
-            except Exception:
-                logger.exception("agent.tool_call failed tool=%s elapsed=%.3fs", tool_def.name, perf_counter() - tool_start)
-                raise
-            logger.info(
-                "agent.tool_call done tool=%s elapsed=%.3fs result=%s",
-                tool_def.name,
-                perf_counter() - tool_start,
-                result,
-            )
-            return result
+        if iscoroutinefunction(handler):
+            async def _tool_fn(**kwargs: Any) -> Any:
+                tool_start = perf_counter()
+                args = {key: value for key, value in kwargs.items() if value is not None}
+                logger.info("agent.tool_call start tool=%s arg_keys=%s", tool_def.name, sorted(args.keys()))
+                try:
+                    result = await handler(**args)
+                except Exception:
+                    logger.error(
+                        "agent.tool_call done tool=%s elapsed=%.3fs status=failed",
+                        tool_def.name,
+                        perf_counter() - tool_start,
+                    )
+                    raise
+                logger.info(
+                    "agent.tool_call done tool=%s elapsed=%.3fs status=success result_type=%s",
+                    tool_def.name,
+                    perf_counter() - tool_start,
+                    type(result).__name__,
+                )
+                return result
+        else:
+            def _tool_fn(**kwargs: Any) -> Any:
+                tool_start = perf_counter()
+                args = {key: value for key, value in kwargs.items() if value is not None}
+                logger.info("agent.tool_call start tool=%s arg_keys=%s", tool_def.name, sorted(args.keys()))
+                try:
+                    result = handler(**args)
+                except Exception:
+                    logger.error(
+                        "agent.tool_call done tool=%s elapsed=%.3fs status=failed",
+                        tool_def.name,
+                        perf_counter() - tool_start,
+                    )
+                    raise
+                logger.info(
+                    "agent.tool_call done tool=%s elapsed=%.3fs status=success result_type=%s",
+                    tool_def.name,
+                    perf_counter() - tool_start,
+                    type(result).__name__,
+                )
+                return result
 
         _tool_fn.__name__ = f"tool_{tool_def.name}"
         _tool_fn.__doc__ = tool_def.description or f"Tool: {tool_def.name}"

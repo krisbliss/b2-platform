@@ -173,23 +173,39 @@ def analyze_death_certificate_consistency(
     image_bytes: bytes,
     *,
     api_key: str | None = None,
+    project: str | None = None,
+    location: str | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:
-    """Extract death certificate facts and score narrative consistency in one Gemini call."""
+    """Extract death certificate facts and score narrative consistency in one Gemini call.
+
+    Supports both Vertex AI (project/location) and Gemini API key authentication.
+    Vertex AI takes precedence when GOOGLE_CLOUD_PROJECT is set.
+    """
     transcript = _render_chat_history(chat_history)
     if not transcript:
         raise ValueError("chat_history must not be empty")
     if not image_bytes:
         raise ValueError("image_bytes must not be empty")
 
-    gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
-    if not gemini_api_key:
-        raise ValueError("GEMINI_API_KEY is required for Gemini calls")
+    vertex_project  = project  or os.environ.get("GOOGLE_CLOUD_PROJECT")
+    vertex_location = location or os.environ.get("VERTEX_LOCATION", "us-central1")
+    gemini_api_key  = api_key  or os.environ.get("GEMINI_API_KEY")
+
+    if not vertex_project and not gemini_api_key:
+        raise ValueError(
+            "GEMINI_API_KEY is required for Gemini calls "
+            "(or set GOOGLE_CLOUD_PROJECT for Vertex AI)"
+        )
 
     gemini_model = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
     genai, gentypes = _load_gemini_client()
-    client     = genai.Client(api_key=gemini_api_key)
+    if vertex_project:
+        client = genai.Client(vertexai=True, project=vertex_project, location=vertex_location)
+    else:
+        client = genai.Client(api_key=gemini_api_key)
+
     image_part = gentypes.Part.from_bytes(
         data=bytes(image_bytes),
         mime_type=_sniff_mime(image_bytes),
@@ -233,6 +249,8 @@ def analyze_death_certificate_consistency_base64(
     image_b64: str,
     *,
     api_key: str | None = None,
+    project: str | None = None,
+    location: str | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:
     """Convenience wrapper — accepts base64-encoded image instead of raw bytes."""
@@ -240,5 +258,7 @@ def analyze_death_certificate_consistency_base64(
         chat_history,
         base64.b64decode(image_b64),
         api_key=api_key,
+        project=project,
+        location=location,
         model=model,
     )
