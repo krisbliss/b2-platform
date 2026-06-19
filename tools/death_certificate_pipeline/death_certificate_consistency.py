@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import importlib
 import json
 import os
@@ -16,45 +17,33 @@ _CONSISTENCY_RESPONSE_SCHEMA: dict[str, Any] = {
         "certificate": {
             "type": "object",
             "properties": {
-                "full_name": {"type": "string", "nullable": True},
-                "date_of_death": {"type": "string", "nullable": True},
-                "place_of_death": {"type": "string", "nullable": True},
-                "age_at_death": {"type": "integer", "nullable": True},
-                "cause_of_death": {"type": "string", "nullable": True},
-                "certificate_number": {"type": "string", "nullable": True},
-                "issuing_authority": {"type": "string", "nullable": True},
-                "registration_date": {"type": "string", "nullable": True},
+                "full_name":           {"type": "string", "nullable": True},
+                "date_of_death":       {"type": "string", "nullable": True},
+                "place_of_death":      {"type": "string", "nullable": True},
+                "age_at_death":        {"type": "integer", "nullable": True},
+                "cause_of_death":      {"type": "string", "nullable": True},
+                "certificate_number":  {"type": "string", "nullable": True},
+                "issuing_authority":   {"type": "string", "nullable": True},
+                "registration_date":   {"type": "string", "nullable": True},
                 "other_visible_details": {"type": "object"},
             },
             "required": [
-                "full_name",
-                "date_of_death",
-                "place_of_death",
-                "age_at_death",
-                "cause_of_death",
-                "certificate_number",
-                "issuing_authority",
-                "registration_date",
-                "other_visible_details",
+                "full_name", "date_of_death", "place_of_death", "age_at_death",
+                "cause_of_death", "certificate_number", "issuing_authority",
+                "registration_date", "other_visible_details",
             ],
         },
-        "consistency_score": {"type": "number"},
-        "consistency_label": {"type": "string", "enum": ["high", "moderate", "low"]},
-        "confidence": {"type": "number"},
-        "matches": {"type": "array", "items": {"type": "string"}},
-        "mismatches": {"type": "array", "items": {"type": "string"}},
-        "uncertain_points": {"type": "array", "items": {"type": "string"}},
-        "summary": {"type": "string"},
+        "consistency_score":  {"type": "number"},
+        "consistency_label":  {"type": "string", "enum": ["high", "moderate", "low"]},
+        "confidence":         {"type": "number"},
+        "matches":            {"type": "array", "items": {"type": "string"}},
+        "mismatches":         {"type": "array", "items": {"type": "string"}},
+        "uncertain_points":   {"type": "array", "items": {"type": "string"}},
+        "summary":            {"type": "string"},
     },
     "required": [
-        "certificate",
-        "consistency_score",
-        "consistency_label",
-        "confidence",
-        "matches",
-        "mismatches",
-        "uncertain_points",
-        "summary",
+        "certificate", "consistency_score", "consistency_label", "confidence",
+        "matches", "mismatches", "uncertain_points", "summary",
     ],
 }
 
@@ -134,15 +123,14 @@ def _render_chat_history(chat_history: str | Sequence[Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def _load_vertex_client() -> tuple[Any, Any]:
+def _load_gemini_client() -> tuple[Any, Any]:
     try:
-        genai = importlib.import_module("google.genai")
+        genai    = importlib.import_module("google.genai")
         gentypes = importlib.import_module("google.genai.types")
     except ImportError as exc:
         raise ImportError(
-            "google-genai is required to analyze death certificate consistency with Gemini."
+            "google-genai is required for death certificate consistency analysis."
         ) from exc
-
     return genai, gentypes
 
 
@@ -188,11 +176,9 @@ def analyze_death_certificate_consistency(
     model: str | None = None,
 ) -> dict[str, Any]:
     """Extract death certificate facts and score narrative consistency in one Gemini call."""
-
     transcript = _render_chat_history(chat_history)
     if not transcript:
         raise ValueError("chat_history must not be empty")
-
     if not image_bytes:
         raise ValueError("image_bytes must not be empty")
 
@@ -200,19 +186,16 @@ def analyze_death_certificate_consistency(
     if not gemini_api_key:
         raise ValueError("GEMINI_API_KEY is required for Gemini calls")
 
-    gemini_model = model or os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
+    gemini_model = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
-    genai, gentypes = _load_vertex_client()
-    client = genai.Client(api_key=gemini_api_key)
+    genai, gentypes = _load_gemini_client()
+    client     = genai.Client(api_key=gemini_api_key)
     image_part = gentypes.Part.from_bytes(
         data=bytes(image_bytes),
         mime_type=_sniff_mime(image_bytes),
     )
 
-    prompt = (
-        f"{_CONSISTENCY_PROMPT}\n\n"
-        f"Chat history:\n{transcript}\n"
-    )
+    prompt = f"{_CONSISTENCY_PROMPT}\n\nChat history:\n{transcript}\n"
 
     config = gentypes.GenerateContentConfig(
         responseMimeType="application/json",
@@ -232,16 +215,30 @@ def analyze_death_certificate_consistency(
     if not isinstance(certificate, dict):
         certificate = {}
 
-    result = {
-        "certificate": certificate,
+    return {
+        "certificate":       certificate,
         "consistency_score": round(_clamp01(parsed.get("consistency_score")), 3),
         "consistency_label": str(parsed.get("consistency_label", "moderate")),
-        "confidence": round(_clamp01(parsed.get("confidence")), 3),
-        "matches": [str(item) for item in parsed.get("matches", [])],
-        "mismatches": [str(item) for item in parsed.get("mismatches", [])],
-        "uncertain_points": [str(item) for item in parsed.get("uncertain_points", [])],
-        "summary": str(parsed.get("summary", "")),
-        "model": gemini_model,
+        "confidence":        round(_clamp01(parsed.get("confidence")), 3),
+        "matches":           [str(i) for i in parsed.get("matches", [])],
+        "mismatches":        [str(i) for i in parsed.get("mismatches", [])],
+        "uncertain_points":  [str(i) for i in parsed.get("uncertain_points", [])],
+        "summary":           str(parsed.get("summary", "")),
+        "model":             gemini_model,
     }
 
-    return result
+
+def analyze_death_certificate_consistency_base64(
+    chat_history: str | Sequence[Any],
+    image_b64: str,
+    *,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Convenience wrapper — accepts base64-encoded image instead of raw bytes."""
+    return analyze_death_certificate_consistency(
+        chat_history,
+        base64.b64decode(image_b64),
+        api_key=api_key,
+        model=model,
+    )
