@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from app.core.envelope import (
+from src.envelope import (
     CanonicalMessage,
     InputType,
     LogEvent,
