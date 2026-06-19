@@ -3,8 +3,6 @@ import logging
 from .router import AgentRouter, BelowThresholdError
 from .session import Session
 
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-
 
 def chat_loop() -> None:
 	"""Run a simple terminal chat loop against the routed agent."""
@@ -52,5 +50,5 @@ def chat_loop() -> None:
 
 
 def main() -> None:
-	"""Entry point for the interactive loop."""
+	logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 	chat_loop()
