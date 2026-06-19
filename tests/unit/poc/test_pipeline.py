@@ -25,7 +25,7 @@ import json
 
 import pytest
 
-from poc.models import (
+from tools.death_certificate_pipeline.models import (
     AuthenticitySignal,
     Band,
     ConsistencySignal,
@@ -33,7 +33,7 @@ from poc.models import (
     ReliabilityResult,
     Submission,
 )
-from poc.pipeline import _stage_score, run_pipeline
+from tools.death_certificate_pipeline.pipeline import _stage_score, run_pipeline
 from tools.fake_image_detector.models import Escalation, ToolResult, Verdict
 
 # ---------------------------------------------------------------------------

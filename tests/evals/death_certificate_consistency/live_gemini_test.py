@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from death_certificate_consistency import analyze_death_certificate_consistency
+from tools.death_certificate_pipeline.death_certificate_consistency import analyze_death_certificate_consistency
 
 # --- Config ---
 IMAGE_PATH = "image.png"  # Change to your local image path
