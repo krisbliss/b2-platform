@@ -1,19 +1,33 @@
 """Death certificate reliability pipeline.
 
-Stage order: document → authenticity → consistency → score
+Workflow: Submission → document → authenticity → consistency → ReliabilityResult
 
-All stage functions are async so POC-2 can drop in real implementations
-(fake_image_detector is async) without changing run_pipeline's signature.
+Tools used:
+  tools.fake_image_detector.pipeline   — Stage 2: image authenticity (EXIF, checksum,
+                                         Gemini extract, reverse image search, SynthID)
+  tools.death_certificate_pipeline     — Stage 3: Gemini extracts certificate facts and
+  .death_certificate_consistency         scores them against the claimant narrative
 
-Stub default output: score=88, band=HIGH.
-Stage weights: document=0.2, authenticity=0.4, consistency=0.4.
-Hard escalation (HUMAN_REVIEW or AUTO_REJECT) forces Band.ESCALATE.
+Weights: document=0.2, authenticity=0.4, consistency=0.4
+Hard escalation (HUMAN_REVIEW or AUTO_REJECT from authenticity) overrides the band.
+
+Environment:
+  GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT  — required for authenticity (Gemini checks)
+                                            and consistency stage
+  Without credentials, Gemini checks are skipped inside fake_image_detector and
+  consistency returns score=0.0 — pipeline still completes with honest partial data.
 """
 
 from __future__ import annotations
 
-from tools.fake_image_detector.models import Escalation, ToolResult, Verdict
+import logging
+import os
 
+from tools.fake_image_detector.models import Escalation
+from tools.fake_image_detector.pipeline import build_pipeline as _build_authenticity_pipeline
+from tools.death_certificate_pipeline.death_certificate_consistency import (
+    analyze_death_certificate_consistency,
+)
 from tools.death_certificate_pipeline.models import (
     AuthenticitySignal,
     Band,
@@ -23,12 +37,7 @@ from tools.death_certificate_pipeline.models import (
     Submission,
 )
 
-_DEFAULT_TOOL_RESULT = ToolResult(
-    verdict=Verdict.PASS,
-    risk_score=0.1,
-    escalation=Escalation.AUTO_ACCEPT,
-    checks=[],
-)
+logger = logging.getLogger(__name__)
 
 _STAGE_WEIGHTS: dict[str, float] = {
     "document":     0.2,
@@ -36,42 +45,161 @@ _STAGE_WEIGHTS: dict[str, float] = {
     "consistency":  0.4,
 }
 
+# Supported image formats detected from magic bytes (no PIL needed)
+_IMAGE_MAGIC: list[tuple[bytes, int, str]] = [
+    (b"\x49\x49\x2a\x00", 4, "tiff"),   # TIFF little-endian (common for scanned docs)
+    (b"\x4d\x4d\x00\x2a", 4, "tiff"),   # TIFF big-endian
+    (b"\xff\xd8",          2, "jpeg"),
+    (b"\x89PNG",           4, "png"),
+    (b"%PDF",              4, "pdf"),
+]
+
 
 # ---------------------------------------------------------------------------
-# Stage stubs — replace each body with real implementation in POC-2
+# Stage 1: document — validate image format, determine legibility
 # ---------------------------------------------------------------------------
 
 async def _stage_document(submission: Submission) -> DocumentSignal:
-    """Stub: assumes document is legible and typed as death_certificate."""
+    """Validate the image and detect its format from magic bytes.
+
+    Runs without any external dependencies (PIL, Tesseract, Gemini).
+    WEBP requires checking offset 8–12 so it is handled separately.
+    """
+    image = submission.image
+
+    if not image:
+        return DocumentSignal(legible=False, notes=["image is empty"])
+
+    fmt = "unknown"
+    for magic, length, name in _IMAGE_MAGIC:
+        if image[:length] == magic:
+            fmt = name
+            break
+
+    if fmt == "unknown" and len(image) >= 12 and image[8:12] == b"WEBP":
+        fmt = "webp"
+
+    legible = fmt != "unknown"
+    notes   = [] if legible else [
+        f"unrecognized image format — first 4 bytes: {image[:4].hex()}"
+    ]
+
+    logger.info("stage.document fmt=%s legible=%s bytes=%d", fmt, legible, len(image))
+
     return DocumentSignal(
-        legible=True,
-        document_type="death_certificate",
+        legible=legible,
+        document_type="death_certificate" if legible else None,
+        notes=notes,
     )
 
+
+# ---------------------------------------------------------------------------
+# Stage 2: authenticity — fake image detector
+# ---------------------------------------------------------------------------
 
 async def _stage_authenticity(submission: Submission) -> AuthenticitySignal:
-    """Stub: returns a clean PASS from the fake_image_detector defaults."""
-    return AuthenticitySignal(result=_DEFAULT_TOOL_RESULT)
+    """Run the fake image detector against the certificate image.
 
+    Uses _build_authenticity_pipeline() which loads the check configuration
+    from tools/fake_image_detector/config/pipeline.yaml. Checks with missing
+    optional dependencies (PIL, Tesseract, Google Vision) are skipped
+    automatically — the pipeline still runs the remaining checks.
+
+    context={"input_type": "document"} bypasses Tesseract-based auto-
+    classification so the document check suite always runs regardless of
+    whether Tesseract is installed.
+    """
+    pipeline = _build_authenticity_pipeline()
+    result   = await pipeline.run(
+        submission.image,
+        context={"input_type": "document"},
+    )
+
+    logger.info(
+        "stage.authenticity verdict=%s risk=%.3f escalation=%s checks=%d early_exit=%s",
+        result.verdict.value, result.risk_score,
+        result.escalation.value, len(result.checks), result.early_exit,
+    )
+    return AuthenticitySignal(result=result)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: consistency — Gemini certificate extraction + narrative scoring
+# ---------------------------------------------------------------------------
 
 async def _stage_consistency(submission: Submission) -> ConsistencySignal:
-    """Stub: returns high consistency with empty extracted fields."""
+    """Extract certificate facts with Gemini and score them against the narrative.
+
+    Uses analyze_death_certificate_consistency() which makes a single Gemini
+    call to both extract visible certificate fields and compare them against
+    the claimant's chat_history (submission.narrative).
+
+    Requires GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT. If neither is set the
+    stage returns a zero-confidence signal with a note — the pipeline still
+    completes and the score reflects the missing data.
+    """
+    has_credentials = bool(
+        os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+    )
+
+    if not has_credentials:
+        logger.warning("stage.consistency skipped — no Gemini credentials")
+        return ConsistencySignal(
+            consistency_score=0.0,
+            consistency_label="unknown",
+            confidence=0.0,
+            summary=(
+                "Consistency check skipped — "
+                "set GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT to enable."
+            ),
+        )
+
+    try:
+        result = analyze_death_certificate_consistency(
+            chat_history=submission.narrative,
+            image_bytes=submission.image,
+        )
+    except Exception as exc:
+        logger.exception("stage.consistency failed")
+        return ConsistencySignal(
+            consistency_score=0.0,
+            consistency_label="unknown",
+            confidence=0.0,
+            summary=f"Consistency check failed: {exc}",
+        )
+
+    logger.info(
+        "stage.consistency score=%.3f label=%s confidence=%.3f fields=%d",
+        result["consistency_score"], result["consistency_label"],
+        result["confidence"], len(result.get("certificate") or {}),
+    )
+
     return ConsistencySignal(
-        consistency_score=0.8,
-        consistency_label="high",
-        confidence=0.75,
-        summary="Stub pipeline: no LLM analysis performed.",
+        consistency_score=result["consistency_score"],
+        consistency_label=result["consistency_label"],
+        confidence=result["confidence"],
+        extracted_fields=result.get("certificate") or {},
+        matches=result.get("matches", []),
+        contradictions=result.get("mismatches", []),   # tool uses "mismatches"
+        uncertain_points=result.get("uncertain_points", []),
+        summary=result.get("summary", ""),
     )
 
 
-async def _stage_score(
-    doc: DocumentSignal,
-    auth: AuthenticitySignal,
-    con: ConsistencySignal,
-) -> ReliabilityResult:
-    """Compute ReliabilityResult from the three signal outputs.
+# ---------------------------------------------------------------------------
+# Stage 4: score — combine signals into a ReliabilityResult
+# ---------------------------------------------------------------------------
 
-    Hard escalation from the authenticity stage overrides the numeric band.
+async def _stage_score(
+    doc:  DocumentSignal,
+    auth: AuthenticitySignal,
+    con:  ConsistencySignal,
+) -> ReliabilityResult:
+    """Combine the three stage signals into a weighted reliability score.
+
+    Hard escalation from authenticity overrides the numeric band — any
+    HUMAN_REVIEW or AUTO_REJECT from fake_image_detector forces ESCALATE
+    regardless of how strong the document and consistency signals are.
     """
     doc_score  = 1.0 if doc.legible else 0.3
     auth_score = round(1.0 - auth.result.risk_score, 3)
@@ -85,15 +213,9 @@ async def _stage_score(
 
     weighted  = sum(sub_scores[k] * _STAGE_WEIGHTS[k] for k in _STAGE_WEIGHTS)
     raw_score = max(1, min(100, round(weighted * 100)))
+    flags:    list[str] = []
 
-    flags: list[str] = []
-
-    hard_escalation = auth.result.escalation in (
-        Escalation.HUMAN_REVIEW,
-        Escalation.AUTO_REJECT,
-    )
-
-    if hard_escalation:
+    if auth.result.escalation in (Escalation.HUMAN_REVIEW, Escalation.AUTO_REJECT):
         band = Band.ESCALATE
         flags.append("HARD_ESCALATION")
     elif raw_score >= 75:
@@ -114,6 +236,8 @@ async def _stage_score(
         f"(score={con.consistency_score:.2f})"
     )
 
+    logger.info("stage.score raw=%d band=%s flags=%s", raw_score, band.value, flags)
+
     return ReliabilityResult(
         score=raw_score,
         band=band,
@@ -126,11 +250,17 @@ async def _stage_score(
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Entry point
 # ---------------------------------------------------------------------------
 
 async def run_pipeline(submission: Submission) -> ReliabilityResult:
-    """Run the full reliability pipeline on a Submission."""
+    """Run the full death certificate reliability pipeline.
+
+    Input:  Submission(image: bytes, narrative: str, case_fields: dict)
+    Output: ReliabilityResult(score, band, sub_scores, flags, extracted_fields)
+
+    Called by poc/api.py (FastAPI POST /score) and poc/cli.py (CLI).
+    """
     doc_signal  = await _stage_document(submission)
     auth_signal = await _stage_authenticity(submission)
     con_signal  = await _stage_consistency(submission)
