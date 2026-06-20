@@ -1,6 +1,6 @@
 """Compatibility re-exports — canonical implementation at tools.privacy.pii_scrubber."""
 
-from tools.privacy.pii_scrubber import (  # noqa: F401
+from tools.privacy.pii_scrubber import (
     AuditStoreConfig,
     ContactIdentifierConfig,
     EncryptedPiiBuffer,
@@ -21,3 +21,26 @@ from tools.privacy.pii_scrubber import (  # noqa: F401
     encrypt_audit_entry,
     load_public_key,
 )
+
+__all__ = [
+    "AuditStoreConfig",
+    "ContactIdentifierConfig",
+    "EncryptedPiiBuffer",
+    "EntityConfig",
+    "NlpEngineConfig",
+    "PiiAuditStore",
+    "PiiConfig",
+    "PiiEntity",
+    "PiiScrubber",
+    "ScrubResult",
+    "SessionEntry",
+    "SessionRegistry",
+    "SessionState",
+    "_classify_failure",
+    "_FailureKind",
+    "_make_contact_identifier",
+    "decrypt_audit_entry",
+    "encrypt_audit_entry",
+    "load_public_key",
+]
+
