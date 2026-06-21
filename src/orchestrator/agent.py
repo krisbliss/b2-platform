@@ -11,7 +11,7 @@ import yaml
 
 from pydantic import Field
 from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, UserContent
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
@@ -281,7 +281,7 @@ class Agent:
 
     def run_stream(
         self,
-        user_message: str,
+        user_message: str | Sequence[UserContent],
         message_history: Optional[Sequence[ModelMessage]] = None,
     ) -> Any:
         start = perf_counter()

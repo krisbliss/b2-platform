@@ -1,7 +1,8 @@
 import logging
 from time import perf_counter
+from typing import Sequence
 
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, UserContent
 
 from .orchestrator.agent import Agent
 
@@ -13,9 +14,9 @@ class Session:
         self.agent = agent
         self._history: list[ModelMessage] = []
 
-    def send_stream(self, user_message: str):
+    def send_stream(self, user_message: str | Sequence[UserContent]):
         start = perf_counter()
-        logger.info("session.stream start history=%d chars=%d", len(self._history), len(user_message))
+        logger.info("session.stream start history=%d input_type=%s", len(self._history), type(user_message).__name__)
         streamed = self.agent.run_stream(user_message, message_history=self._history)
         logger.info("session.stream object returned elapsed=%.3fs", perf_counter() - start)
         first_chunk_at: float | None = None
