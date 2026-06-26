@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tools.death_certificate_consistency import analyze_death_certificate_consistency
+from tools.death_certificate_pipeline.death_certificate_consistency import analyze_death_certificate_consistency
 
 CHAT_HISTORY = [
     {"role": "user", "content": "The person died on May 1, 2024 in Seattle."},

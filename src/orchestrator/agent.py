@@ -7,6 +7,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Annotated, Any, Literal, Optional, Sequence
 
+import yaml
+
 from pydantic import Field
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.messages import ModelMessage
@@ -31,20 +33,9 @@ class AgentDefinition:
     provider: dict[str, Any] = field(default_factory=dict)
 
 
-def _load_yaml_module():
-    try:
-        return importlib.import_module("yaml")
-    except ImportError as exc:
-        raise ImportError(
-            "pyyaml is required to load agent definitions. Install it to use Agent YAML files."
-        ) from exc
-
-
 def _load_agent_definition_from_file(agent_file: Path) -> AgentDefinition:
-    yaml_module = _load_yaml_module()
-
     with open(agent_file, "r") as handle:
-        agent_data = yaml_module.safe_load(handle) or {}
+        agent_data = yaml.safe_load(handle) or {}
 
     name = agent_data.get("name")
     system_prompt = agent_data.get("system_prompt")

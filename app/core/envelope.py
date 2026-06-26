@@ -1,6 +1,6 @@
-"""Compatibility re-exports for the canonical envelope implementation."""
+"""Compatibility re-exports — canonical implementation at src.envelope."""
 
-from src.envelope import (
+from src.envelope import (  # noqa: F401
     CanonicalMessage,
     InputType,
     LocationContext,

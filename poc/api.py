@@ -13,8 +13,8 @@ import json
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from poc.models import ReliabilityResult, Submission
-from poc.pipeline import run_pipeline
+from tools.death_certificate_pipeline.models import ReliabilityResult, Submission
+from tools.death_certificate_pipeline.pipeline import run_pipeline
 
 app = FastAPI(
     title="B2 POC-1 — Reliability Scorer",

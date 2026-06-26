@@ -1,7 +1,9 @@
-"""Compatibility re-exports for the PII scrubber."""
+"""Compatibility re-exports — canonical implementation at tools.privacy.pii_scrubber."""
 
 from tools.privacy.pii_scrubber import (
     AuditStoreConfig,
+    ContactIdentifierConfig,
+    EncryptedPiiBuffer,
     EntityConfig,
     NlpEngineConfig,
     PiiAuditStore,
@@ -9,12 +11,21 @@ from tools.privacy.pii_scrubber import (
     PiiEntity,
     PiiScrubber,
     ScrubResult,
+    SessionEntry,
+    SessionRegistry,
+    SessionState,
     _classify_failure,
     _FailureKind,
+    _make_contact_identifier,
+    decrypt_audit_entry,
+    encrypt_audit_entry,
+    load_public_key,
 )
 
 __all__ = [
     "AuditStoreConfig",
+    "ContactIdentifierConfig",
+    "EncryptedPiiBuffer",
     "EntityConfig",
     "NlpEngineConfig",
     "PiiAuditStore",
@@ -22,6 +33,14 @@ __all__ = [
     "PiiEntity",
     "PiiScrubber",
     "ScrubResult",
+    "SessionEntry",
+    "SessionRegistry",
+    "SessionState",
     "_classify_failure",
     "_FailureKind",
+    "_make_contact_identifier",
+    "decrypt_audit_entry",
+    "encrypt_audit_entry",
+    "load_public_key",
 ]
+
