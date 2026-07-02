@@ -10,9 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 class Session:
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, history: Sequence[ModelMessage] | None = None):
         self.agent = agent
-        self._history: list[ModelMessage] = []
+        self._history: list[ModelMessage] = list(history or [])
+
+    @property
+    def history(self) -> list[ModelMessage]:
+        return list(self._history)
 
     def send_stream(self, user_message: str | Sequence[UserContent]):
         start = perf_counter()
