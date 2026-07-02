@@ -7,6 +7,7 @@ from pydantic_ai.messages import BinaryImage, ImageUrl, TextContent, UserContent
 
 from .router import AgentRouter
 from .session import Session
+from .session_store import FirestoreSessionStore
 
 DEFAULT_IMAGE_MEDIA_TYPE = "image/jpeg"
 IMAGE_PROMPT_TEXT = "The user sent this image on WhatsApp. Analyze it and provide a helpful response."
@@ -19,6 +20,8 @@ def chat(
     image_bytes: bytes | None = None,
     image_url: str | None = None,
     image_media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
+    session_id: str | None = None,
+    channel: str = "whatsapp",
 ) -> str:
     """Route one WhatsApp text or image message through the agent loop and return the response."""
 
@@ -33,9 +36,19 @@ def chat(
 
     router = AgentRouter()
     agent, _metadata = router.route_with_metadata(route_query)
-    session = Session(agent)
+    store = FirestoreSessionStore() if session_id is not None else None
+    history = store.load_history(session_id) if store is not None else None
+    session = Session(agent, history=history)
 
-    return "".join(session.send_stream(prompt))
+    response = "".join(session.send_stream(prompt))
+    if store is not None:
+        store.save_history(
+            session_id,
+            session.history,
+            agent_name=getattr(agent, "name", None),
+            channel=channel,
+        )
+    return response
 
 
 def _build_prompt(

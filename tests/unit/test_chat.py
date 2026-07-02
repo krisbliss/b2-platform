@@ -58,14 +58,18 @@ def test_build_prompt_rejects_multiple_inputs() -> None:
 
 
 def test_chat_routes_and_returns_streamed_text(monkeypatch) -> None:
+    created_sessions = []
+
     class FakeRouter:
         def route_with_metadata(self, query: str):
             assert query == "hello"
             return object(), {"score": 1.0}
 
     class FakeSession:
-        def __init__(self, agent: object):
+        def __init__(self, agent: object, history=None):
             self.agent = agent
+            self.history = list(history or [])
+            created_sessions.append(self)
 
         def send_stream(self, prompt: str):
             assert prompt == "hello"
@@ -75,5 +79,58 @@ def test_chat_routes_and_returns_streamed_text(monkeypatch) -> None:
     monkeypatch.setattr(chat_module, "load_dotenv", lambda: None)
     monkeypatch.setattr(chat_module, "AgentRouter", FakeRouter)
     monkeypatch.setattr(chat_module, "Session", FakeSession)
+    monkeypatch.setattr(
+        chat_module,
+        "FirestoreSessionStore",
+        lambda: (_ for _ in ()).throw(AssertionError("store should not be used")),
+    )
 
     assert chat(text="hello") == "hi there"
+    assert created_sessions[0].history == []
+
+
+def test_chat_loads_and_saves_stateful_history(monkeypatch) -> None:
+    loaded_history = [object()]
+    saved = {}
+
+    class FakeAgent:
+        name = "support"
+
+    class FakeRouter:
+        def route_with_metadata(self, query: str):
+            assert query == "hello"
+            return FakeAgent(), {"score": 1.0}
+
+    class FakeStore:
+        def load_history(self, session_id: str):
+            assert session_id == "session-1"
+            return loaded_history
+
+        def save_history(self, session_id: str, history, *, agent_name=None, channel=None) -> None:
+            saved["session_id"] = session_id
+            saved["history"] = history
+            saved["agent_name"] = agent_name
+            saved["channel"] = channel
+
+    class FakeSession:
+        def __init__(self, agent: object, history=None):
+            assert isinstance(agent, FakeAgent)
+            assert history == loaded_history
+            self.history = ["updated"]
+
+        def send_stream(self, prompt: str):
+            assert prompt == "hello"
+            yield "hi"
+
+    monkeypatch.setattr(chat_module, "load_dotenv", lambda: None)
+    monkeypatch.setattr(chat_module, "AgentRouter", FakeRouter)
+    monkeypatch.setattr(chat_module, "Session", FakeSession)
+    monkeypatch.setattr(chat_module, "FirestoreSessionStore", FakeStore)
+
+    assert chat(text="hello", session_id="session-1", channel="sms") == "hi"
+    assert saved == {
+        "session_id": "session-1",
+        "history": ["updated"],
+        "agent_name": "support",
+        "channel": "sms",
+    }
