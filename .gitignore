@@ -42,6 +42,3 @@ tools/fake_image_detector/local_samples/
 tools/fake_image_detector/models/
 tests/fixtures/dataset/
 
-# Docker
-Dockerfile
-Dockerfile*
