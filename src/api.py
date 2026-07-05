@@ -11,6 +11,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from .chat import chat
 
@@ -63,7 +64,7 @@ async def message_endpoint(
         return {"response": None}
 
     logger.info("api.message routing wa_id=%s chars=%d", wa_id, len(text))
-    response = chat(text=text)
+    response = await run_in_threadpool(chat, text=text)
     logger.info("api.message done wa_id=%s response_chars=%d", wa_id, len(response))
     return {"response": response}
 
