@@ -6,6 +6,7 @@ pydantic-settings>=2.3.0
 pydantic>=2.8.0
 pydantic-ai==1.98.0
 google-genai>=1.0.0
+google-cloud-firestore>=2.0.0
 numpy>=1.26.0
 pyyaml>=6.0
 python-dotenv>=1.0
