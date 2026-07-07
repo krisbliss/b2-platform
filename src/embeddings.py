@@ -23,11 +23,11 @@ class GoogleEmbedder:
     ) -> None:
         self.model = model
         self.output_dimensionality = output_dimensionality
-        self._client = genai.Client(
-            vertexai=True,
-            project=project or os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=location or os.getenv("VERTEX_LOCATION", "us-east1"),
-        )
+        vertex_project = project or os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not vertex_project:
+            raise ValueError("GOOGLE_CLOUD_PROJECT is required for Vertex AI embeddings (or pass project=...)")
+        vertex_location = location or os.getenv("VERTEX_LOCATION", "us-central1")
+        self._client = genai.Client(vertexai=True, project=vertex_project, location=vertex_location)
 
     @staticmethod
     def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
