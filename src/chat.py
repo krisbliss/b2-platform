@@ -9,9 +9,20 @@ from .router import AgentRouter
 from .session import Session
 from .session_store import FirestoreSessionStore
 
+load_dotenv()
+
 DEFAULT_IMAGE_MEDIA_TYPE = "image/jpeg"
 IMAGE_PROMPT_TEXT = "The user sent this image on WhatsApp. Analyze it and provide a helpful response."
 IMAGE_ROUTING_TEXT = "A WhatsApp user sent an image and needs help interpreting or responding to it."
+
+_router: AgentRouter | None = None
+
+
+def _get_router() -> AgentRouter:
+    global _router
+    if _router is None:
+        _router = AgentRouter()
+    return _router
 
 
 def chat(
@@ -25,7 +36,6 @@ def chat(
 ) -> str:
     """Route one WhatsApp text or image message through the agent loop and return the response."""
 
-    load_dotenv()
     prompt = _build_prompt(
         text=text,
         image_bytes=image_bytes,
@@ -34,7 +44,7 @@ def chat(
     )
     route_query = text.strip() if text is not None else IMAGE_ROUTING_TEXT
 
-    router = AgentRouter()
+    router = _get_router()
     agent, _metadata = router.route_with_metadata(route_query)
     store = FirestoreSessionStore() if session_id is not None else None
     history = store.load_history(session_id) if store is not None else None

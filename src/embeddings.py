@@ -5,23 +5,29 @@ import numpy as np
 from google import genai
 from google.genai import types
 
+# Vertex AI text-embedding-004: 768-dim, same as prior model, no API key required.
+# Uses ADC (Application Default Credentials) — Cloud Run service account supplies these.
+_DEFAULT_MODEL = "text-embedding-004"
+_DEFAULT_DIM = 768
+
 
 class GoogleEmbedder:
-    """Gemini embedding wrapper for document and query embeddings."""
+    """Vertex AI embedding wrapper for document and query embeddings."""
 
     def __init__(
         self,
-        model: str = "gemini-embedding-001",
-        output_dimensionality: int = 768,
-        api_key: str | None = None,
+        model: str = _DEFAULT_MODEL,
+        output_dimensionality: int = _DEFAULT_DIM,
+        project: str | None = None,
+        location: str | None = None,
     ) -> None:
         self.model = model
         self.output_dimensionality = output_dimensionality
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY is required for Gemini embeddings.")
-
-        self._client = genai.Client(api_key=self.api_key)
+        vertex_project = project or os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not vertex_project:
+            raise ValueError("GOOGLE_CLOUD_PROJECT is required for Vertex AI embeddings (or pass project=...)")
+        vertex_location = location or os.getenv("VERTEX_LOCATION", "us-central1")
+        self._client = genai.Client(vertexai=True, project=vertex_project, location=vertex_location)
 
     @staticmethod
     def _l2_normalize(vectors: np.ndarray) -> np.ndarray:

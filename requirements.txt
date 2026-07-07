@@ -4,7 +4,7 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic-settings>=2.3.0
 pydantic>=2.8.0
-pydantic-ai>=0.0.14
+pydantic-ai==1.98.0
 google-genai>=1.0.0
 google-cloud-firestore>=2.0.0
 numpy>=1.26.0

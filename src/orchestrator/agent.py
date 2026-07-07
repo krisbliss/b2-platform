@@ -142,7 +142,7 @@ class Agent:
     @classmethod
     def _build_gemini_model(cls, provider: dict[str, Any], model_name: str) -> tuple[GoogleModel, dict[str, Any]]:
         project = provider.get("project") or os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = provider.get("location") or os.getenv("VERTEX_LOCATION", "us-central1")
+        location = provider.get("location") or os.getenv("VERTEX_LOCATION", "us-east1")
 
         model_settings = cls._model_settings_from_provider(provider, model_name)
         model = GoogleModel(

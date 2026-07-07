@@ -77,6 +77,7 @@ def test_chat_routes_and_returns_streamed_text(monkeypatch) -> None:
             yield " there"
 
     monkeypatch.setattr(chat_module, "load_dotenv", lambda: None)
+    monkeypatch.setattr(chat_module, "_router", None)
     monkeypatch.setattr(chat_module, "AgentRouter", FakeRouter)
     monkeypatch.setattr(chat_module, "Session", FakeSession)
     monkeypatch.setattr(
@@ -123,6 +124,7 @@ def test_chat_loads_and_saves_stateful_history(monkeypatch) -> None:
             yield "hi"
 
     monkeypatch.setattr(chat_module, "load_dotenv", lambda: None)
+    monkeypatch.setattr(chat_module, "_router", None)
     monkeypatch.setattr(chat_module, "AgentRouter", FakeRouter)
     monkeypatch.setattr(chat_module, "Session", FakeSession)
     monkeypatch.setattr(chat_module, "FirestoreSessionStore", FakeStore)
