@@ -197,8 +197,9 @@ def test_message_text_calls_chat(monkeypatch):
 
     captured = {}
 
-    def fake_chat(*, text, **kwargs):
+    def fake_chat(*, text, session_id, **kwargs):
         captured["text"] = text
+        captured["session_id"] = session_id
         return "Givelight is an orphan aid programme."
 
     monkeypatch.setattr(api_module, "chat", fake_chat)
@@ -208,6 +209,7 @@ def test_message_text_calls_chat(monkeypatch):
     assert r.status_code == 200
     assert r.json() == {"response": "Givelight is an orphan aid programme."}
     assert captured["text"] == "Hello B2, what is Givelight?"
+    assert captured["session_id"] == "16508106640"
 
 
 # ---------------------------------------------------------------------------

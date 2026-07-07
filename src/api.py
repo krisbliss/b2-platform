@@ -64,7 +64,7 @@ async def message_endpoint(
         return {"response": None}
 
     logger.info("api.message routing wa_id=%s chars=%d", wa_id, len(text))
-    response = await run_in_threadpool(chat, text=text)
+    response = await run_in_threadpool(chat, text=text, session_id=wa_id)
     logger.info("api.message done wa_id=%s response_chars=%d", wa_id, len(response))
     return {"response": response}
 
