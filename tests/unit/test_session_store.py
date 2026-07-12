@@ -1,8 +1,9 @@
+import base64
 from datetime import datetime, timedelta, timezone
 
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.session_store import FirestoreSessionStore
+from src.session_store import MAX_MEDIA_BYTES, FirestoreSessionStore
 
 
 class FakeSnapshot:
@@ -133,3 +134,112 @@ def test_save_history_serializes_messages_and_sets_metadata_on_create() -> None:
     assert data["channel"] == "whatsapp"
     assert data["history"][0]["kind"] == "request"
     assert data["history"][1]["kind"] == "response"
+
+
+# ---------------------------------------------------------------------------
+# transient media store
+# ---------------------------------------------------------------------------
+
+
+class FakeMediaDocument:
+    def __init__(self, snapshot: FakeSnapshot):
+        self.snapshot = snapshot
+        self.writes = []
+        self.deletes = 0
+
+    def get(self):
+        return self.snapshot
+
+    def set(self, data, merge: bool = False):
+        self.writes.append((data, merge))
+        self.snapshot = FakeSnapshot(True, data)
+
+    def delete(self):
+        self.deletes += 1
+        self.snapshot = FakeSnapshot(False)
+
+
+class FakeMediaClient:
+    def __init__(self, document: FakeMediaDocument):
+        self.document_ref = document
+        self.collection_names: list[str] = []
+
+    def collection(self, name: str):
+        self.collection_names.append(name)
+        return FakeCollection(self.document_ref)
+
+
+def _media_store(document: FakeMediaDocument, now: datetime):
+    return FirestoreSessionStore(
+        client=FakeMediaClient(document),
+        server_timestamp="SERVER_TIME",
+        now=lambda: now,
+    )
+
+
+def test_save_media_stores_base64_and_metadata() -> None:
+    now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    document = FakeMediaDocument(FakeSnapshot(False))
+    client = FakeMediaClient(document)
+    store = FirestoreSessionStore(client=client, server_timestamp="SERVER_TIME", now=lambda: now)
+
+    ok = store.save_media("session-1", b"\xff\xd8abc", mime_type="image/jpeg")
+
+    assert ok is True
+    assert "session_media" in client.collection_names
+    data, _merge = document.writes[0]
+    assert data["session_id"] == "session-1"
+    assert data["image_b64"] == base64.b64encode(b"\xff\xd8abc").decode("ascii")
+    assert data["mime_type"] == "image/jpeg"
+    assert data["expires_at"] == now + timedelta(hours=72)
+
+
+def test_load_latest_media_round_trips_bytes() -> None:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    document = FakeMediaDocument(
+        FakeSnapshot(
+            True,
+            {
+                "image_b64": base64.b64encode(b"\xff\xd8abc").decode("ascii"),
+                "mime_type": "image/png",
+                "expires_at": now + timedelta(hours=1),
+            },
+        )
+    )
+    store = _media_store(document, now)
+
+    assert store.load_latest_media("session-1") == (b"\xff\xd8abc", "image/png")
+
+
+def test_load_latest_media_deletes_expired_and_returns_none() -> None:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    document = FakeMediaDocument(
+        FakeSnapshot(
+            True,
+            {
+                "image_b64": base64.b64encode(b"abc").decode("ascii"),
+                "expires_at": now,
+            },
+        )
+    )
+    store = _media_store(document, now)
+
+    assert store.load_latest_media("session-1") is None
+    assert document.deletes == 1
+
+
+def test_load_latest_media_returns_none_when_missing() -> None:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    store = _media_store(FakeMediaDocument(FakeSnapshot(False)), now)
+    assert store.load_latest_media("session-1") is None
+
+
+def test_save_media_skips_oversized_image() -> None:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    document = FakeMediaDocument(FakeSnapshot(False))
+    store = _media_store(document, now)
+
+    ok = store.save_media("session-1", b"x" * (MAX_MEDIA_BYTES + 1), mime_type="image/jpeg")
+
+    assert ok is False
+    assert document.writes == []

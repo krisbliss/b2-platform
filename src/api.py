@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from .chat import chat
+from .whatsapp_media import download_media
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +23,26 @@ app = FastAPI(title="b2 WhatsApp Adapter")
 
 _WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 
+# WhatsApp media message types that carry a downloadable media ID.
+_MEDIA_TYPES = ("image", "document")
 
-def _extract_message(payload: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Return (wa_id, text) for a text message, or (None, None) for anything else."""
+
+@dataclass
+class InboundMessage:
+    """A normalized inbound WhatsApp message."""
+
+    wa_id: str | None = None
+    text: str | None = None
+    media_id: str | None = None
+    mime_type: str | None = None
+
+
+def _extract_message(payload: dict[str, Any]) -> InboundMessage:
+    """Normalize a WhatsApp webhook payload into an InboundMessage.
+
+    Handles text and media (image/document) messages; returns an empty
+    InboundMessage for anything else (e.g. status updates).
+    """
     try:
         entry = (payload.get("entry") or [])[0]
         value = (entry.get("changes") or [])[0].get("value", {})
@@ -31,20 +50,28 @@ def _extract_message(payload: dict[str, Any]) -> tuple[str | None, str | None]:
         messages = value.get("messages") or []
 
         if not messages:
-            return None, None
+            return InboundMessage()
 
         msg = messages[0]
-        if msg.get("type") != "text":
-            return None, None
-
+        msg_type = msg.get("type")
         wa_id = (contacts[0].get("wa_id") if contacts else None) or msg.get("from")
-        text = (msg.get("text") or {}).get("body", "").strip()
-        if not text:
-            return None, None
 
-        return wa_id, text
+        if msg_type == "text":
+            text = (msg.get("text") or {}).get("body", "").strip()
+            if not text:
+                return InboundMessage(wa_id=wa_id)
+            return InboundMessage(wa_id=wa_id, text=text)
+
+        if msg_type in _MEDIA_TYPES:
+            media = msg.get(msg_type) or {}
+            media_id = media.get("id")
+            if not media_id:
+                return InboundMessage(wa_id=wa_id)
+            return InboundMessage(wa_id=wa_id, media_id=media_id, mime_type=media.get("mime_type"))
+
+        return InboundMessage(wa_id=wa_id)
     except (IndexError, AttributeError, TypeError, KeyError):
-        return None, None
+        return InboundMessage()
 
 
 @app.post("/message")
@@ -58,15 +85,32 @@ async def message_endpoint(
     payload = await request.json()
     logger.info("api.message received object=%s", payload.get("object"))
 
-    wa_id, text = _extract_message(payload)
-    if text is None:
-        logger.info("api.message skipped — no text payload")
-        return {"response": None}
+    message = _extract_message(payload)
 
-    logger.info("api.message routing wa_id=%s chars=%d", wa_id, len(text))
-    response = await run_in_threadpool(chat, text=text, session_id=wa_id)
-    logger.info("api.message done wa_id=%s response_chars=%d", wa_id, len(response))
-    return {"response": response}
+    if message.text is not None:
+        logger.info("api.message routing text wa_id=%s chars=%d", message.wa_id, len(message.text))
+        response = await run_in_threadpool(chat, text=message.text, session_id=message.wa_id)
+        logger.info("api.message done wa_id=%s response_chars=%d", message.wa_id, len(response))
+        return {"response": response}
+
+    if message.media_id is not None:
+        logger.info("api.message media wa_id=%s media=%s", message.wa_id, message.media_id)
+        media = await download_media(message.media_id)
+        if media is None:
+            logger.info("api.message skipped — media download unavailable")
+            return {"response": None}
+        image_bytes, mime_type = media
+        response = await run_in_threadpool(
+            chat,
+            image_bytes=image_bytes,
+            image_media_type=mime_type,
+            session_id=message.wa_id,
+        )
+        logger.info("api.message done wa_id=%s response_chars=%d", message.wa_id, len(response))
+        return {"response": response}
+
+    logger.info("api.message skipped — no actionable payload")
+    return {"response": None}
 
 
 @app.get("/health")

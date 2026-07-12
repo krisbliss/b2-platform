@@ -5,14 +5,21 @@ from typing import Sequence
 from pydantic_ai.messages import ModelMessage, UserContent
 
 from .orchestrator.agent import Agent
+from .orchestrator.context import SessionContext
 
 logger = logging.getLogger(__name__)
 
 
 class Session:
-    def __init__(self, agent: Agent, history: Sequence[ModelMessage] | None = None):
+    def __init__(
+        self,
+        agent: Agent,
+        history: Sequence[ModelMessage] | None = None,
+        deps: SessionContext | None = None,
+    ):
         self.agent = agent
         self._history: list[ModelMessage] = list(history or [])
+        self._deps = deps
 
     @property
     def history(self) -> list[ModelMessage]:
@@ -21,7 +28,7 @@ class Session:
     def send_stream(self, user_message: str | Sequence[UserContent]):
         start = perf_counter()
         logger.info("session.stream start history=%d input_type=%s", len(self._history), type(user_message).__name__)
-        streamed = self.agent.run_stream(user_message, message_history=self._history)
+        streamed = self.agent.run_stream(user_message, message_history=self._history, deps=self._deps)
         logger.info("session.stream object returned elapsed=%.3fs", perf_counter() - start)
         first_chunk_at: float | None = None
 
