@@ -24,6 +24,6 @@ system_prompt: |
 
 provider:
   type: gemini
-  model: gemini-2.0-flash
+  model: gemini-2.5-flash
   settings:
     thinking_budget: 0
