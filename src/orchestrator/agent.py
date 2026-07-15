@@ -14,7 +14,7 @@ from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.messages import ModelMessage, UserContent
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleCloudProvider
+from pydantic_ai.providers.google import GoogleProvider
 
 from . import prompts, tools
 
@@ -147,7 +147,8 @@ class Agent:
         model_settings = cls._model_settings_from_provider(provider, model_name)
         model = GoogleModel(
             model_name,
-            provider=GoogleCloudProvider(
+            provider=GoogleProvider(
+                vertexai=True,
                 project=project,
                 location=location,
             ),
