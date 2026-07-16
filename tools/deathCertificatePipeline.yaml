@@ -1,17 +1,13 @@
-name: death_certificate_pipeline
-description: "Extracts death certificate facts and checks them against the chat history"
+name: death_certificate_verification
+description: >
+  Verifies the death certificate the user most recently uploaded: runs the full
+  reliability pipeline (document, authenticity, narrative consistency, score) and,
+  if it passes, hands the case off to GiveLight. Call this once the user has sent a
+  document image — the image is pulled automatically and you do not pass it in.
 input_schema:
   type: object
-  properties:
-    chat_history:
-      type: string
-      description: "Chat history containing the narrative claims to compare"
-    image_bytes:
-      type: string
-      description: "Base64-encoded bytes of the death certificate image"
-  required:
-    - chat_history
-    - image_bytes
+  properties: {}
 implementation:
   type: function
-  handler: tools.death_certificate_pipeline.death_certificate_consistency.analyze_death_certificate_consistency_base64
+  needs_context: true
+  handler: tools.death_certificate_pipeline.verify.verify_death_certificate

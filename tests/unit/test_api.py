@@ -112,30 +112,34 @@ def _make_client(secret: str = "", monkeypatch=None):
 
 def test_extract_message_text():
     from src.api import _extract_message
-    wa_id, text = _extract_message(SAMPLE_TEXT_PAYLOAD)
-    assert wa_id == "16508106640"
-    assert text == "Hello B2, what is Givelight?"
+    msg = _extract_message(SAMPLE_TEXT_PAYLOAD)
+    assert msg.wa_id == "16508106640"
+    assert msg.text == "Hello B2, what is Givelight?"
+    assert msg.media_id is None
 
 
-def test_extract_message_status_update_returns_none():
+def test_extract_message_status_update_returns_empty():
     from src.api import _extract_message
-    wa_id, text = _extract_message(STATUS_UPDATE_PAYLOAD)
-    assert wa_id is None
-    assert text is None
+    msg = _extract_message(STATUS_UPDATE_PAYLOAD)
+    assert msg.text is None
+    assert msg.media_id is None
 
 
-def test_extract_message_image_returns_none():
+def test_extract_message_image_returns_media_id():
     from src.api import _extract_message
-    wa_id, text = _extract_message(IMAGE_PAYLOAD)
-    assert wa_id is None
-    assert text is None
+    msg = _extract_message(IMAGE_PAYLOAD)
+    assert msg.wa_id == "16508106640"
+    assert msg.text is None
+    assert msg.media_id == "media-123"
+    assert msg.mime_type == "image/jpeg"
 
 
 def test_extract_message_empty_payload():
     from src.api import _extract_message
-    wa_id, text = _extract_message({})
-    assert wa_id is None
-    assert text is None
+    msg = _extract_message({})
+    assert msg.wa_id is None
+    assert msg.text is None
+    assert msg.media_id is None
 
 
 def test_extract_message_blank_text():
@@ -143,9 +147,9 @@ def test_extract_message_blank_text():
     payload = {
         "entry": [{"changes": [{"value": {"messages": [{"type": "text", "text": {"body": "  "}, "from": "123"}]}}]}]
     }
-    wa_id, text = _extract_message(payload)
-    assert wa_id is None
-    assert text is None
+    msg = _extract_message(payload)
+    assert msg.text is None
+    assert msg.media_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -180,15 +184,51 @@ def test_message_status_update_returns_null(monkeypatch):
     assert r.json() == {"response": None}
 
 
-def test_message_image_returns_null(monkeypatch):
+def test_message_image_download_unavailable_returns_null(monkeypatch):
+    """If media can't be downloaded (e.g. no WHATSAPP_TOKEN), respond with null."""
     import src.api as api_module
     monkeypatch.setattr(api_module, "_WEBHOOK_SECRET", "")
-    monkeypatch.setattr(api_module, "chat", lambda **kw: "nope")
+    monkeypatch.setattr(api_module, "chat", lambda **kw: "should not be called")
+
+    async def fake_download(media_id):
+        return None
+
+    monkeypatch.setattr(api_module, "download_media", fake_download)
 
     client = TestClient(api_module.app)
     r = client.post("/message", json=IMAGE_PAYLOAD)
     assert r.status_code == 200
     assert r.json() == {"response": None}
+
+
+def test_message_image_downloads_and_calls_chat(monkeypatch):
+    """A downloadable image is fetched and routed to chat as image_bytes."""
+    import src.api as api_module
+    monkeypatch.setattr(api_module, "_WEBHOOK_SECRET", "")
+
+    captured = {}
+
+    async def fake_download(media_id):
+        captured["media_id"] = media_id
+        return b"\xff\xd8jpeg-bytes", "image/jpeg"
+
+    def fake_chat(*, image_bytes=None, image_media_type=None, session_id=None, **kwargs):
+        captured["image_bytes"] = image_bytes
+        captured["image_media_type"] = image_media_type
+        captured["session_id"] = session_id
+        return "Your request is being processed."
+
+    monkeypatch.setattr(api_module, "download_media", fake_download)
+    monkeypatch.setattr(api_module, "chat", fake_chat)
+
+    client = TestClient(api_module.app)
+    r = client.post("/message", json=IMAGE_PAYLOAD)
+    assert r.status_code == 200
+    assert r.json() == {"response": "Your request is being processed."}
+    assert captured["media_id"] == "media-123"
+    assert captured["image_bytes"] == b"\xff\xd8jpeg-bytes"
+    assert captured["image_media_type"] == "image/jpeg"
+    assert captured["session_id"] == "16508106640"
 
 
 def test_message_text_calls_chat(monkeypatch):
