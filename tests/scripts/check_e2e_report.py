@@ -80,7 +80,7 @@ def collect_failures(
     if failed:
         failures.append(f"report has {failed} failed case(s)")
     if unknown > args.max_unknown:
-        failures.append(f"unknown={unknown} exceeds max_unknown={args.max_unknown}")
+        failures.append(f"no_response={unknown} exceeds max_unknown={args.max_unknown}")
     if false_positives > args.max_fp:
         failures.append(f"false_positives={false_positives} exceeds max_fp={args.max_fp}")
     if args.max_fn is not None and false_negatives > args.max_fn:
@@ -106,7 +106,10 @@ def collect_failures(
     for result in results:
         errors = result.get("errors") or []
         if errors:
-            failures.append(f"{result.get('case', '<unknown>')} errors: {'; '.join(map(str, errors))}")
+            errors_text = "; ".join(map(str, errors))
+            if result.get("classification") == "UNKNOWN":
+                errors_text = errors_text.replace("actual outcome is unknown", "actual outcome is no response")
+            failures.append(f"{result.get('case', '<unknown>')} errors: {errors_text}")
 
     return failures
 
@@ -128,7 +131,7 @@ def print_summary(
         f"accuracy={accuracy_text}, "
         f"FP={stats.get('false_positives', 0)}, "
         f"FN={stats.get('false_negatives', 0)}, "
-        f"unknown={stats.get('unknown', 0)}"
+        f"no_response={stats.get('unknown', 0)}"
     )
     print_group_summary("By kind", group_by(results, "kind"))
     print_group_summary("By country/kind", group_by_country_kind(results))
@@ -154,7 +157,7 @@ def print_group_summary(label: str, groups: dict[str, list[dict[str, Any]]]) -> 
     if not groups:
         return
     print(f"\n{label}:")
-    print("Scope | Total | Passed | Failed | TP | TN | FP | FN | Unknown")
+    print("Scope | Total | Passed | Failed | TP | TN | FP | FN | No Response")
     print("--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---:")
     for scope, results in groups.items():
         counts = {"TP": 0, "TN": 0, "FP": 0, "FN": 0, "UNKNOWN": 0}
