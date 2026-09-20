@@ -80,14 +80,40 @@ def test_no_active_checks_for_route_flags():
     assert ela.calls == 0
 
 
-def test_check_runtime_error_flags_immediately():
+def test_skipped_check_error_is_ignored():
     exif = _StubCheck(CheckResult(check="exif", passed=True, skipped=True, error="boom"))
+    ela = _StubCheck(_passing("ela"))
+    p = _pipeline([(_cfg("exif"), exif), (_cfg("ela"), ela)])
+    result = run(p.run(b"img", {"input_type": "face"}))
+
+    assert result.verdict == Verdict.PASS
+    assert result.escalation == Escalation.AUTO_ACCEPT
+    assert result.early_exit is False
+    assert result.checks[0].skipped is True
+    assert result.checks[0].error == "boom"
+    assert ela.calls == 1
+
+
+def test_unskipped_check_runtime_error_flags_immediately():
+    exif = _StubCheck(CheckResult(check="exif", passed=False, skipped=False, error="boom"))
     p = _pipeline([(_cfg("exif"), exif)])
     result = run(p.run(b"img", {"input_type": "face"}))
+
     assert result.verdict == Verdict.FLAG
     assert result.escalation == Escalation.HUMAN_REVIEW
     assert result.early_exit is True
     assert "CHECK_RUNTIME_ERROR" in result.checks[0].flags
+
+
+def test_all_skipped_checks_force_human_review_at_clear_pass_threshold():
+    exif = _StubCheck(CheckResult(check="exif", passed=True, skipped=True))
+    p = _pipeline([(_cfg("exif"), exif)])
+    result = run(p.run(b"img", {"input_type": "face"}))
+
+    assert result.risk_score == 0.2
+    assert result.verdict == Verdict.FLAG
+    assert result.escalation == Escalation.HUMAN_REVIEW
+    assert result.early_exit is False
 
 
 def test_hard_escalation_flag_forces_human_review_before_score_classification():

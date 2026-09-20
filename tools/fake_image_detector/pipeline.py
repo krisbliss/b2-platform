@@ -98,7 +98,7 @@ class FakeImageDetectorPipeline:
                     error=str(e),
                 )
 
-            if result.error is not None:
+            if result.error is not None and not result.skipped:
                 results.append(
                     CheckResult(
                         check=check_cfg.id,
@@ -219,7 +219,7 @@ class FakeImageDetectorPipeline:
     def _score(self, results: list[CheckResult]) -> float:
         active = [r for r in results if not r.skipped]
         if not active:
-            return 0.0
+            return self._config.clear_pass
         total_weight = sum(r.confidence for r in active)
         if total_weight <= 0.0:
             # Fail-safe: checks ran but produced no usable confidence → force human review band.
