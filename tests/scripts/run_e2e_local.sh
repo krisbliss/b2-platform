@@ -20,22 +20,6 @@ if [[ "${E2E_LOAD_ENV:-1}" != "0" && -f "${ROOT_DIR}/.env" ]]; then
   set +a
 fi
 
-HAD_ENABLE_E2E_DEBUG=0
-ORIGINAL_ENABLE_E2E_DEBUG=""
-if [[ -n "${ENABLE_E2E_DEBUG+x}" ]]; then
-  HAD_ENABLE_E2E_DEBUG=1
-  ORIGINAL_ENABLE_E2E_DEBUG="$ENABLE_E2E_DEBUG"
-fi
-
-restore_enable_e2e_debug() {
-  if [[ "$HAD_ENABLE_E2E_DEBUG" -eq 1 ]]; then
-    export ENABLE_E2E_DEBUG="$ORIGINAL_ENABLE_E2E_DEBUG"
-  else
-    unset ENABLE_E2E_DEBUG
-  fi
-}
-trap restore_enable_e2e_debug EXIT
-
 export ENABLE_E2E_DEBUG=true
 export E2E_DISABLE_WHATSAPP_OUTBOUND=true
 
