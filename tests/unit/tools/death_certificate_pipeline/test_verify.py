@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 from tools.death_certificate_pipeline import verify as verify_module
 from tools.death_certificate_pipeline.models import Band, ReliabilityResult
+from tools.death_certificate_pipeline.pipeline import PipelineExecution
 from tools.death_certificate_pipeline.verify import verify_death_certificate
+from tools.fake_image_detector.models import Escalation, ToolResult, Verdict
 
 
 class FakeStore:
@@ -38,12 +40,24 @@ def _result(band, flags=None):
     )
 
 
+def _execution(band, flags=None):
+    return PipelineExecution(
+        result=_result(band, flags),
+        authenticity=ToolResult(
+            verdict=Verdict.PASS,
+            risk_score=0.1,
+            escalation=Escalation.AUTO_ACCEPT,
+            checks=[],
+        ),
+    )
+
+
 async def test_verify_accepts_and_hands_off(monkeypatch):
     seen = {}
 
     async def fake_pipeline(submission):
         seen["narrative"] = submission.narrative
-        return _result(Band.HIGH)
+        return _execution(Band.HIGH)
 
     async def fake_deliver(payload, image_bytes, mime_type):
         seen["payload"] = payload
@@ -51,7 +65,7 @@ async def test_verify_accepts_and_hands_off(monkeypatch):
         seen["handoff_mime"] = mime_type
         return True
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
     monkeypatch.setattr(verify_module, "deliver_to_gl", fake_deliver)
 
     result = await verify_death_certificate(_ctx(FakeStore((b"\xff\xd8jpeg", "image/jpeg"))))
@@ -72,13 +86,13 @@ async def test_verify_holds_back_on_hard_escalation(monkeypatch):
     delivered = {"called": False}
 
     async def fake_pipeline(submission):
-        return _result(Band.ESCALATE, flags=["HARD_ESCALATION"])
+        return _execution(Band.ESCALATE, flags=["HARD_ESCALATION"])
 
     async def fake_deliver(payload, image_bytes, mime_type):
         delivered["called"] = True
         return True
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
     monkeypatch.setattr(verify_module, "deliver_to_gl", fake_deliver)
 
     result = await verify_death_certificate(_ctx(FakeStore((b"\xff\xd8jpeg", "image/jpeg"))))
@@ -92,7 +106,7 @@ async def test_verify_reports_no_document_when_store_empty(monkeypatch):
     async def fake_pipeline(submission):  # pragma: no cover - must not run
         raise AssertionError("pipeline should not run without media")
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
 
     result = await verify_death_certificate(_ctx(FakeStore(None), history_text=""))
 
@@ -102,12 +116,12 @@ async def test_verify_reports_no_document_when_store_empty(monkeypatch):
 
 async def test_verify_appends_debug_event(monkeypatch):
     async def fake_pipeline(submission):
-        return _result(Band.MEDIUM)
+        return _execution(Band.MEDIUM)
 
     async def fake_deliver(payload, image_bytes, mime_type):
         return False
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
     monkeypatch.setattr(verify_module, "deliver_to_gl", fake_deliver)
 
     debug_events = []
@@ -127,5 +141,13 @@ async def test_verify_appends_debug_event(monkeypatch):
             "flags": [],
             "extracted_fields": {"full_name": "Jane Doe"},
             "summary": result["summary"],
+            "authenticity": {
+                "verdict": "PASS",
+                "risk_score": 0.1,
+                "escalation": "AUTO_ACCEPT",
+                "early_exit": False,
+                "early_exit_reason": None,
+                "checks": [],
+            },
         }
     ]

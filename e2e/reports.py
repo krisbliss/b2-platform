@@ -54,18 +54,27 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## Cases",
             "",
-            "| Case | Result | Expected | Actual | Class | Final Response Chars | Summary Tool Response | Errors |",
-            "| --- | --- | --- | --- | --- | ---: | --- | --- |",
+            "| Case | Result | Expected | Actual | Class | Authenticity Verdict | Risk Score | Escalation | Early Exit | Early Exit Reason | Final Response Chars | Summary Tool Response | Errors |",
+            "| --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | ---: | --- | --- |",
         ]
     )
     for result in report["results"]:
         status = "PASS" if result["passed"] else "FAIL"
         errors = _markdown_cell("<br>".join(result["errors"]) if result["errors"] else "")
         summary_tool_response = _markdown_cell(result.get("summary_tool_response"))
+        authenticity = _authenticity(result)
+        verdict = _diagnostic_value(authenticity, "verdict")
+        risk_score = _diagnostic_value(authenticity, "risk_score")
+        escalation = _diagnostic_value(authenticity, "escalation")
+        early_exit = _early_exit_value(authenticity)
+        early_exit_reason = _early_exit_reason(authenticity)
         lines.append(
             f"| `{result['case']}` | {status} | {result['expected_outcome']} | "
             f"{result['actual_outcome']} | {result['classification']} | "
-            f"{len(result['final_response'])} | {summary_tool_response} | {errors} |"
+            f"{_markdown_cell(verdict)} | {_markdown_cell(risk_score)} | "
+            f"{_markdown_cell(escalation)} | {_markdown_cell(early_exit)} | "
+            f"{_markdown_cell(early_exit_reason)} | {len(result['final_response'])} | "
+            f"{summary_tool_response} | {errors} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -86,4 +95,34 @@ def _percent(value: float | None) -> str:
 
 
 def _markdown_cell(value: Any) -> str:
-    return str(value or "").replace("|", "\\|").replace("\n", "<br>")
+    text = "" if value is None else str(value)
+    return text.replace("|", "\\|").replace("\n", "<br>")
+
+
+def _authenticity(result: dict[str, Any]) -> dict[str, Any] | None:
+    tool_result = result.get("tool_result")
+    if not isinstance(tool_result, dict):
+        return None
+    authenticity = tool_result.get("authenticity")
+    return authenticity if isinstance(authenticity, dict) else None
+
+
+def _diagnostic_value(authenticity: dict[str, Any] | None, key: str) -> Any:
+    if authenticity is None:
+        return "n/a"
+    value = authenticity.get(key)
+    return "n/a" if value is None else value
+
+
+def _early_exit_value(authenticity: dict[str, Any] | None) -> str:
+    if authenticity is None or "early_exit" not in authenticity:
+        return "n/a"
+    return "Yes" if authenticity["early_exit"] else "No"
+
+
+def _early_exit_reason(authenticity: dict[str, Any] | None) -> str:
+    if authenticity is None:
+        return "n/a"
+    if not authenticity.get("early_exit"):
+        return ""
+    return str(authenticity.get("early_exit_reason") or "n/a")

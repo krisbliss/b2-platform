@@ -17,6 +17,8 @@ from src.orchestrator.context import SessionContext
 from src.session import Session
 from tools.death_certificate_pipeline import verify as verify_module
 from tools.death_certificate_pipeline.models import Band, ReliabilityResult
+from tools.death_certificate_pipeline.pipeline import PipelineExecution
+from tools.fake_image_detector.models import Escalation, ToolResult, Verdict
 
 _AGENT_YAML = Path(__file__).resolve().parents[2] / "agents" / "poc_deathCertParserAgent.yaml"
 
@@ -39,10 +41,20 @@ def test_model_call_pulls_image_and_hands_off(monkeypatch):
     async def fake_pipeline(submission):
         seen["narrative"] = submission.narrative
         seen["image"] = submission.image
-        return ReliabilityResult(
-            score=82, band=Band.HIGH, sub_scores={}, weights={}, flags=[],
-            justification="ok", extracted_fields={"full_name": "Jane Doe"},
-        )
+        return PipelineExecution(result=ReliabilityResult(
+            score=82,
+            band=Band.HIGH,
+            sub_scores={},
+            weights={},
+            flags=[],
+            justification="ok",
+            extracted_fields={"full_name": "Jane Doe"},
+        ), authenticity=ToolResult(
+            verdict=Verdict.PASS,
+            risk_score=0.1,
+            escalation=Escalation.AUTO_ACCEPT,
+            checks=[],
+        ))
 
     async def fake_deliver(payload, image_bytes, mime_type):
         seen["handoff"] = payload
@@ -50,7 +62,7 @@ def test_model_call_pulls_image_and_hands_off(monkeypatch):
         seen["handoff_mime"] = mime_type
         return True
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
     monkeypatch.setattr(verify_module, "deliver_to_gl", fake_deliver)
     monkeypatch.setattr(
         agent_module.Agent,
@@ -90,7 +102,7 @@ def test_orphan_claim_document_upload_returns_tool_validation_output(monkeypatch
 
     async def fake_pipeline(submission):
         seen["submission"] = submission
-        return ReliabilityResult(
+        return PipelineExecution(result=ReliabilityResult(
             score=91,
             band=Band.HIGH,
             sub_scores={"document": 1.0, "authenticity": 0.95, "consistency": 0.9},
@@ -105,7 +117,12 @@ def test_orphan_claim_document_upload_returns_tool_validation_output(monkeypatch
                 "date_of_death": "2024-05-01",
                 "place_of_death": "Seattle",
             },
-        )
+        ), authenticity=ToolResult(
+            verdict=Verdict.PASS,
+            risk_score=0.05,
+            escalation=Escalation.AUTO_ACCEPT,
+            checks=[],
+        ))
 
     async def fake_deliver(payload, image_bytes, mime_type):
         seen["handoff"] = payload
@@ -113,7 +130,7 @@ def test_orphan_claim_document_upload_returns_tool_validation_output(monkeypatch
         seen["handoff_mime"] = mime_type
         return True
 
-    monkeypatch.setattr(verify_module, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(verify_module, "run_pipeline_with_diagnostics", fake_pipeline)
     monkeypatch.setattr(verify_module, "deliver_to_gl", fake_deliver)
     monkeypatch.setattr(
         agent_module.Agent,

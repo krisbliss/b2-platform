@@ -13,6 +13,11 @@ def test_summary_payload_uses_verification_summary_without_tool_framing() -> Non
                 "handed_off": True,
                 "summary": "Verification passed.",
                 "flags": [],
+                "authenticity": {
+                    "verdict": "PASS",
+                    "risk_score": 0.0,
+                    "checks": [],
+                },
             }
         ],
     )

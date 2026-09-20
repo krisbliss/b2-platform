@@ -282,6 +282,26 @@ async def test_message_text_debug_requires_env_and_header(monkeypatch):
     assert captured["debug_events"] == []
 
 
+async def test_message_text_debug_header_without_env_returns_normal_response(monkeypatch):
+    import src.api as api_module
+    monkeypatch.setattr(api_module, "_WEBHOOK_SECRET", "")
+    monkeypatch.setattr(api_module, "_ENABLE_E2E_DEBUG", "")
+
+    def fake_chat(*, text, session_id, debug_events=None, **kwargs):
+        debug_events.append({"tool": "death_certificate_verification", "accepted": False})
+        return "ok"
+
+    monkeypatch.setattr(api_module, "chat", fake_chat)
+    monkeypatch.setattr(api_module, "run_in_threadpool", _run_direct)
+    monkeypatch.setattr(api_module, "generate_summary_tool_response", _no_summary)
+
+    response = await api_module.message_endpoint(
+        FakeRequest(SAMPLE_TEXT_PAYLOAD), x_e2e_debug="true"
+    )
+
+    assert response == {"response": "ok"}
+
+
 async def test_message_text_sends_summary_tool_response_as_second_message(monkeypatch):
     import src.api as api_module
     monkeypatch.setattr(api_module, "_WEBHOOK_SECRET", "")

@@ -39,6 +39,7 @@ from tools.death_certificate_pipeline.pipeline import (
     _stage_document,
     _stage_score,
     run_pipeline,
+    run_pipeline_with_diagnostics,
 )
 from tools.fake_image_detector.models import Escalation, ToolResult, Verdict
 
@@ -234,6 +235,15 @@ class TestStageDocument:
 # ---------------------------------------------------------------------------
 
 class TestRunPipeline:
+    @pytest.mark.asyncio
+    async def test_diagnostics_expose_authenticity_without_changing_result(
+        self, minimal_submission, mock_pipeline_stages
+    ) -> None:
+        execution = await run_pipeline_with_diagnostics(minimal_submission)
+
+        assert isinstance(execution.result, ReliabilityResult)
+        assert execution.authenticity is _CLEAN_TOOL_RESULT
+
     @pytest.mark.asyncio
     async def test_returns_reliability_result(
         self, minimal_submission, mock_pipeline_stages

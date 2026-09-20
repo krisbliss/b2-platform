@@ -16,9 +16,11 @@ import hashlib
 import logging
 from typing import Any
 
+from tools.death_certificate_pipeline.debug import build_verification_debug_event
 from tools.death_certificate_pipeline.handoff import build_handoff_payload, deliver_to_gl
 from tools.death_certificate_pipeline.models import Band, ReliabilityResult, Submission
-from tools.death_certificate_pipeline.pipeline import run_pipeline
+from tools.death_certificate_pipeline.pipeline import run_pipeline_with_diagnostics
+from tools.fake_image_detector.models import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +42,16 @@ def _accepted(result: ReliabilityResult) -> bool:
     return result.band in _ACCEPT_BANDS and "HARD_ESCALATION" not in result.flags
 
 
-def _append_debug_event(deps: Any, payload: dict[str, Any], accepted: bool | None) -> None:
+def _append_debug_event(
+    deps: Any,
+    payload: dict[str, Any],
+    accepted: bool | None,
+    authenticity: ToolResult | None = None,
+) -> None:
     debug_events = getattr(deps, "debug_events", None)
     if debug_events is None:
         return
-    debug_events.append(
-        {
-            "tool": "death_certificate_verification",
-            "status": payload.get("status"),
-            "score": payload.get("score"),
-            "band": payload.get("band"),
-            "accepted": accepted,
-            "handed_off": bool(payload.get("handed_off", False)),
-            "flags": list(payload.get("flags", [])),
-            "extracted_fields": dict(payload.get("extracted_fields", {})),
-            "summary": str(payload.get("summary", "")),
-        }
-    )
+    debug_events.append(build_verification_debug_event(payload, accepted, authenticity))
 
 
 async def verify_death_certificate(ctx: Any) -> dict[str, Any]:
@@ -85,7 +80,8 @@ async def verify_death_certificate(ctx: Any) -> dict[str, Any]:
         case_fields={"channel": "whatsapp", "contact_identifier": _contact_identifier(session_id)},
     )
 
-    result = await run_pipeline(submission)
+    execution = await run_pipeline_with_diagnostics(submission)
+    result = execution.result
     handed_off = False
 
     accepted = _accepted(result)
@@ -127,5 +123,5 @@ async def verify_death_certificate(ctx: Any) -> dict[str, Any]:
             "Consider asking the user for a clearer photo of the full certificate."
         ),
     }
-    _append_debug_event(deps, payload, accepted=accepted)
+    _append_debug_event(deps, payload, accepted=accepted, authenticity=execution.authenticity)
     return payload

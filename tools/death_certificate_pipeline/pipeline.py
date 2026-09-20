@@ -20,10 +20,11 @@ Environment:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import os
 
-from tools.fake_image_detector.models import Escalation
+from tools.fake_image_detector.models import Escalation, ToolResult
 from tools.fake_image_detector.pipeline import build_pipeline as _build_authenticity_pipeline
 from tools.death_certificate_pipeline.death_certificate_consistency import (
     analyze_death_certificate_consistency,
@@ -38,6 +39,15 @@ from tools.death_certificate_pipeline.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PipelineExecution:
+    """Final reliability result plus bounded-stage inputs needed for diagnostics."""
+
+    result: ReliabilityResult
+    authenticity: ToolResult
+
 
 _STAGE_WEIGHTS: dict[str, float] = {
     "document":     0.2,
@@ -258,6 +268,15 @@ async def _stage_score(
 # Entry point
 # ---------------------------------------------------------------------------
 
+async def run_pipeline_with_diagnostics(submission: Submission) -> PipelineExecution:
+    """Run the pipeline and retain its authenticity result for E2E diagnostics."""
+    doc_signal = await _stage_document(submission)
+    auth_signal = await _stage_authenticity(submission)
+    con_signal = await _stage_consistency(submission)
+    result = await _stage_score(doc_signal, auth_signal, con_signal)
+    return PipelineExecution(result=result, authenticity=auth_signal.result)
+
+
 async def run_pipeline(submission: Submission) -> ReliabilityResult:
     """Run the full death certificate reliability pipeline.
 
@@ -266,7 +285,5 @@ async def run_pipeline(submission: Submission) -> ReliabilityResult:
 
     Called by poc/api.py (FastAPI POST /score) and poc/cli.py (CLI).
     """
-    doc_signal  = await _stage_document(submission)
-    auth_signal = await _stage_authenticity(submission)
-    con_signal  = await _stage_consistency(submission)
-    return await _stage_score(doc_signal, auth_signal, con_signal)
+    execution = await run_pipeline_with_diagnostics(submission)
+    return execution.result
