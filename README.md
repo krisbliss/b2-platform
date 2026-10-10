@@ -486,8 +486,9 @@ This command:
 6. Gates the report with `tests/scripts/check_e2e_report.py`, including
    separate `real` and `fake` summaries.
 
-The local runner restores the previous `ENABLE_E2E_DEBUG` value when it exits.
-If the variable was not set before the run, it unsets it.
+The local runner enables debug output, disables WhatsApp outbound sends, and
+allows an unauthenticated webhook within its child process. These settings do
+not change the calling shell or the deployed service.
 
 If `.env` exists, the e2e scripts load it automatically before running. To run
 without loading `.env`, set `E2E_LOAD_ENV=0`:
@@ -543,9 +544,47 @@ Remote non-production smoke tests require a deployed service URL:
 BASE_URL=https://example.run.app WEBHOOK_SECRET=... tests/scripts/run_e2e_remote.sh
 ```
 
+Like the local runner, the remote runner converts each new `results.json` into
+`results_report.md`, even when cases fail. Reports default to
+`e2e_runs/remote/<timestamp>/`; use `E2E_OUT_DIR` or `--out-dir` to change the
+output directory. A failed test run retains its nonzero exit status. A missing
+new report or a Markdown conversion failure also makes the wrapper fail.
+
+Country/kind filters and other harness arguments are passed through:
+
+```bash
+BASE_URL=https://example.run.app WEBHOOK_SECRET=... \
+  tests/scripts/run_e2e_remote.sh --country Indonesia --kind real
+```
+
+The remote harness POSTs WhatsApp-shaped webhook payloads directly to
+`BASE_URL/message`, with `X-Webhook-Secret` authentication and `X-E2E-Debug:
+true`. `BASE_URL` is the deployed adapter URL, without `/message`. This tests
+the remote webhook handler; it does not send a WhatsApp chat message or test
+Meta delivering a webhook through the central routing service. No local
+uvicorn server, in-memory media registration, or authentication bypass is used.
+
 Remote structured verdicts require `ENABLE_E2E_DEBUG=true` on the deployed
 service. Remote media cases also need a pre-existing Meta media ID in each
 case's `expected.json`; local certificate files are not uploaded in remote mode.
+The service must have the matching `WEBHOOK_SECRET` and a WhatsApp token
+available through `WHATSAPP_TOKEN` or the `WHATSAPP_ACCESS_TOKEN` secret to
+download that media from the Graph API. Setting local environment flags does
+not configure the remote service.
+
+For a PDF case, for example, include:
+
+```json
+{
+  "expected_outcome": "accept",
+  "media_id": "your-meta-media-id",
+  "mime_type": "application/pdf"
+}
+```
+
+Use `image/png` or `image/jpeg` for images. The media ID must refer to the
+intended certificate and be accessible to the deployed service's token. A local
+certificate without a media ID fails the remote case with an `UNKNOWN` result.
 
 Do not commit real certificates or real-person narratives as e2e fixtures.
 
