@@ -1,101 +1,243 @@
-# b2 — Shopify for AI Agents for Good
+# b2 — AI Agents for Nonprofits
 
-> One identity. Every skill. Every tool. Every channel. Every language. Every location. Zero data stored.
+> Agents that take on a nonprofit's day-to-day work, on any LLM, with the guardrails and human oversight the people they serve deserve.
 
-**b2** is an open-source Agentic OS Core Platform built by the [Benevolent Bandwidth Foundation](https://benevolentbandwidth.org). It distributes the power of agentic AI to underserved communities worldwide — through the channels they already use, on the devices they already own, in the languages they already speak, with knowledge of where they actually are.
+**b2** is an open-source platform from the [Benevolent Bandwidth Foundation](https://benevolentbandwidth.org) for building and running AI agents for nonprofits. Nonprofits do vital work with small teams, and much of their time goes to work an agent can share: taking in requests, checking documents, answering the same questions, coordinating people. b2 gives them agents that do this work where the people they serve already are, such as WhatsApp, in their own languages, and hands every decision that needs judgment to a person.
 
-A user in rural Kenya texts a number on WhatsApp. A farmer in Senegal sends a voice note. A mother in rural Indonesia sends an SMS from a basic phone. They all reach **@b2** — one identity — and get a genuinely useful, expert answer tailored to their language, their location, and their context, in under two seconds, from a narrow AI skill built by a contributor anywhere in the world.
+### Our agents
 
-No app to download. No account to create. No data stored. No friction.
+| Agent | What it does | Status |
+|---|---|---|
+| **GiveLight intake** | Families apply to GiveLight for orphan aid over WhatsApp. The agent takes their account, verifies the death certificate, and hands GiveLight's reviewers a ready-to-review case. | Running: our first agent, built for GiveLight only |
+| **Volunteer management** | Helps nonprofits recruit, coordinate and keep in touch with their volunteers. | Next |
+
+### Where we're going
+
+Any nonprofit should be able to pick up an agent for its work and trust it.
+b2 brings the parts every nonprofit would otherwise have to build alone:
+
+- **Any LLM.** Agents aren't tied to one model provider. Each agent names its
+  model, so a nonprofit can choose the one that fits its cost, privacy and
+  language needs.
+- **Guardrails.** Personal data is kept out of model prompts, conversations
+  expire, and anything uncertain goes to a person instead of being decided by
+  the model.
+- **Orchestration.** One number, many agents. A router hands each
+  conversation to the agent built for it, and the agents call the tools they
+  need.
+- **Pretrained agents.** Ready-made agents for work many nonprofits share,
+  starting with volunteer management, that a nonprofit can adapt instead of
+  building from scratch. Agents can also be built for one organization's own
+  process, as GiveLight intake is.
+- **Channels people already use.** WhatsApp first. No app to download and no
+  account to create.
+
+> **Status:** b2 is early. What runs today is the WhatsApp channel and its first
+> agent, GiveLight intake, on Gemini. Much of this document describes the
+> platform b2 is building towards; [What's Running Today](#whats-running-today)
+> describes what is built.
 
 ---
 
 ## The Problem
 
-AI has enormous potential to help the people who need it most — smallholder farmers, patients without healthcare access, workers navigating complex legal systems, students without teachers. But the delivery mechanisms are wrong:
+Nonprofits could gain a great deal from AI agents, but today's tools aren't
+built for them:
 
-- **App-based AI requires** a smartphone, a data plan, an app download, an account, and digital literacy most users don't have
-- **Per-skill bots require** users to know which bot to contact for which problem — a discovery burden that kills adoption
-- **Generic AI gives generic answers** — advice that ignores where a user actually is, which crops grow in their soil, which laws apply in their country, which clinics are nearby
-- **Direct LLM access exposes users** — most platforms pass user identity directly to model providers, creating trackable profiles
-- **Data-hungry systems** exploit the communities they claim to help
+- **Small teams carry manual work.** Staff spend their time on intake, document
+  checks and coordination instead of on the people they serve.
+- **The people they serve aren't on portals.** They're on WhatsApp, on basic
+  phones, writing in many languages.
+- **Generic AI doesn't know the work.** A general chatbot doesn't know a
+  nonprofit's process, and shouldn't be trusted to make decisions about people
+  on its own.
+- **Sensitive data, tight budgets.** Beneficiaries share IDs, certificates and
+  family details. Nonprofits need privacy and oversight they can explain, and
+  can't afford to be locked into one vendor.
 
-b2 solves all five.
+b2 is built for these.
 
 ---
 
 ## How It Works
 
+The full design, using the planned volunteer management agent as the example.
+Parts of this are built and parts are planned;
+[What's Running Today](#whats-running-today) says which.
+
 ```
-User sends "My maize leaves are turning yellow" on WhatsApp from Kisumu, Kenya
+A volunteer messages a nonprofit on WhatsApp, in Spanish:
+"Can I help at the food bank this Saturday morning?"
            ↓
     Channel Adapter (WhatsApp)
-    Normalizes to canonical message envelope
-    Extracts location context (device GPS or prompt inference)
+    Normalizes to a canonical message envelope
            ↓
-    Agentic OS Core Platform
-    ├── NeMo Guardrails        (safety + PII scrub)
-    ├── Location Detector      (device signal · prompt inference · phone prefix)
-    ├── Intent Classifier      (language detection + intent embedding)
-    ├── Skill Router           (intent × location × language → best skill match)
-    ├── Agent Registry         (resolves: kenya-farming-agent v1.2)
-    ├── Tool Registry          (resolves: web_search, weather, rag:kenya-farming-kb)
-    ├── Skill Agent Runtime    (builds self-contained, isolated prompt)
-    └── LLM API Gateway        (b2 identity · no user signal · isolated context)
+    b2 Core
+    ├── Guardrails             (safety · PII scrub · prompt-injection defense)
+    ├── Router                 (picks the agent built for this request)
+    ├── Agent Registry         (resolves: the volunteer management agent)
+    ├── Tool Registry          (resolves: scheduling, rag:volunteer-handbook)
+    ├── Agent Runtime          (builds a self-contained, isolated prompt)
+    └── LLM Gateway            (any LLM · b2 identity · no beneficiary signal)
            ↓
-    LLM sees only: "b2 system" + isolated conversation + skill context
-    LLM never sees: user identity, session ID, location, channel, or any
-                    signal linking this request to any other request
+    The model sees only the agent's instructions and this conversation.
+    It never sees who the volunteer is or any other conversation.
            ↓
-    Gemini 1.5 Pro responds in Swahili with Kenya-specific farming advice
+    The agent finds open Saturday shifts, books one, and replies in
+    Spanish with the time, address and what to bring
            ↓
-User receives hyperlocal expert advice. Nothing stored. LLM learned nothing.
-When session ends, b2 sends a plain-language summary. User holds their own memory.
-If they reply to that summary later, b2 picks up where it left off.
+Anything that needs judgment, such as a safeguarding concern, goes to the
+nonprofit's own staff. The volunteer gets a summary of their shifts.
+Conversations expire; nothing is kept that the work doesn't need.
 ```
 
 ---
 
-## The LLM API Gateway — b2 as the Identity Layer
+## What's Running Today
 
-One of b2's most important architectural properties is invisible to users and contributors: **the LLM never knows who it is talking to.**
+```
+WhatsApp user
+     ↓
+Meta Cloud API → central webhook (whatsapp-webhook, benevolent-bandwidth project)
+     Acknowledges Meta at once, then POSTs each message to b2
+     ↓
+POST /message — b2 WhatsApp adapter (src/api.py, on Cloud Run)
+     ↓
+Router (src/router.py)
+     Picks an agent from agents/*.yaml by embedding similarity
+     (text-embedding-004). A conversation with a sticky agent stays with it.
+     ↓
+Agent (pydantic-ai on Gemini, via Vertex AI) and its tools
+     ↓
+Reply returned to the webhook, which sends it on WhatsApp
+```
 
-Every call to every LLM — Gemini, GPT-4o, Claude, LLaMA — flows through b2's LLM API Gateway. From the model's perspective, every single request originates from b2. There are no users. There are no sessions. There are no locations. There are no languages. There is only b2, asking a well-formed question on behalf of a skill.
+### Agents
 
-This solves two critical problems.
+| Agent | Handles |
+|---|---|
+| `whatsapp_agent` | Greetings, small talk, and general questions about GiveLight and b2. The fallback for anything no other agent covers. |
+| `death_certificate_poc_agent` | Orphan-aid intake for GiveLight. It takes the claimant's account of the death and the death certificate, verifies the certificate, and passes the case to GiveLight. Sticky: once a claim starts here, the rest of the conversation stays here. |
 
-### Problem 1: User identity isolation
+`agents/examples/` holds templates. The router reads only `agents/*.yaml`, so
+they never receive messages.
 
-Without a gateway, LLM providers can in principle link requests to users via IP addresses, API keys, or usage patterns. With the gateway, all requests originate from a single b2 service identity. A user in Kenya and a user in Indonesia are indistinguishable to the model provider — they are both b2.
+### Death-certificate verification
+
+When the certificate arrives, the intake agent calls the
+`death_certificate_verification` tool
+(`tools/death_certificate_pipeline/verify.py`). The model never sees the image;
+the tool loads it from the session store and:
+
+1. **Reads the file.** Images and PDFs are accepted. A file that can't be read
+   goes to review.
+2. **Checks authenticity.** The checks in `tools/fake_image_detector` look for
+   forgery and editing. Most of the weight is on a Gemini vision check.
+3. **Checks consistency.** Gemini reads the certificate's details and compares
+   them with what the claimant said. If the claimant hasn't described the
+   death, this check is neutral and doesn't count against them.
+4. **Scores the case from 1 to 100**, using the versioned settings in
+   `tools/death_certificate_pipeline/config/scoring.yaml`. The high and medium
+   bands are accepted. A fraud flag always sends the case to review.
+5. **Hands every case to GiveLight** with a case reference, marked either
+   `accepted` or `needs_review` with the reasons. GiveLight's team does the
+   human review.
+
+Accuracy on the current test set is under
+[Latest results](#latest-results).
+
+### GiveLight handoff
+
+b2 uploads each case (the document and a JSON payload) to a Cloud Storage
+bucket, named by `GIVELIGHT_HANDOFF_BUCKET`. It can only add files there, never
+read or delete them. GiveLight's own Apps Script
+([`integrations/givelight-drive-automation`](integrations/givelight-drive-automation/README.md))
+moves each case into GiveLight's private Drive folder, emails their team, and
+deletes it from the bucket. b2 never has access to GiveLight's Drive. Details:
+[docs/integrations/google-drive-handoff.md](docs/integrations/google-drive-handoff.md).
+
+### State
+
+For each conversation, Firestore holds the message history, the agent handling
+it, and the latest uploaded image. All of it expires 72 hours after the last
+message (`src/session_store.py`).
+
+### Deployment and configuration
+
+Two Cloud Run services run the adapter: `b2-whatsapp-adapter` and
+`b2-whatsapp-adapter-staging`. Both are built by `cloudbuild.yaml`. Their
+environment variables and secrets are listed in
+[docs/cloud-run-config.md](docs/cloud-run-config.md).
+
+### Running it locally
+
+```bash
+pip install -r requirements.txt
+pytest tests/unit               # unit tests
+python -m src.main              # chat with the agents in the terminal
+python scripts/e2e_cases.py     # e2e cases, see End-to-End Test Automation
+```
+
+The agents and the verification checks call Gemini on Vertex AI, so set
+`GOOGLE_CLOUD_PROJECT` and sign in with
+`gcloud auth application-default login` first.
+
+---
+
+## The LLM Gateway — Any Model, No Beneficiary Identity
+
+*Planned. Today model calls go from the adapter straight to Gemini on Vertex
+AI.*
+
+Nonprofits shouldn't have to pick one AI vendor forever, and the people they
+serve shouldn't become a profile at a model provider. The LLM Gateway handles
+both: **every agent can run on any LLM, and the LLM never knows who it is
+talking to.**
+
+Every call to every model — Gemini, GPT, Claude, Llama or an open model a
+nonprofit hosts itself — flows through b2's gateway. The agent's YAML names the
+model, so moving an agent to another provider is a configuration change, not a
+rewrite. From the model's perspective, every request comes from b2. There are
+no beneficiaries, no sessions and no phone numbers, only b2 asking a
+well-formed question on behalf of an agent.
+
+This solves two problems.
+
+### Problem 1: Beneficiary identity isolation
+
+Without a gateway, model providers can in principle link requests to people
+through IP addresses, API keys or usage patterns. With the gateway, all
+requests come from a single b2 service identity. Two people messaging a
+nonprofit are indistinguishable to the model provider: both are b2.
 
 ```
 WITHOUT b2 gateway:
-  User A in Kenya → [Kenya IP, session token A] → Gemini
-  User B in Kenya → [Kenya IP, session token B] → Gemini
-  Gemini provider can potentially correlate A and B by geography
+  Person A → [IP, session token A] → model provider
+  Person B → [IP, session token B] → model provider
+  The provider can potentially correlate A and B
 
 WITH b2 gateway:
-  User A in Kenya → b2 API Gateway → [b2 identity only] → Gemini
-  User B in Kenya → b2 API Gateway → [b2 identity only] → Gemini
-  Gemini provider sees only: b2, b2. No correlation possible.
+  Person A → b2 LLM Gateway → [b2 identity only] → any model
+  Person B → b2 LLM Gateway → [b2 identity only] → any model
+  The provider sees only: b2, b2. No correlation possible.
 ```
 
 ### Problem 2: Conversation context contamination
 
-LLMs are stateless between API calls — they have no memory. But if prompt construction is sloppy, one user's context can accidentally bleed into another user's response. Consider:
+LLMs are stateless between API calls — they have no memory. But if prompt construction is sloppy, one person's context can bleed into another person's response. Consider:
 
 ```
 BAD — implicit shared context:
-  Prompt: "Continue helping the user with their farming question."
-  History: [turn from user A in Kenya about maize]
-  New user B's message: "What crops should I plant?"
-  Result: LLM responds about maize in Kenya — wrong for user B
+  Prompt: "Continue helping the volunteer with their shifts."
+  History: [turns from volunteer A about their Saturday shift]
+  Volunteer B's message: "When am I working next?"
+  Result: the model answers with volunteer A's shift — wrong for volunteer B
 
 GOOD — explicit isolated context (b2's approach):
   Every prompt is fully self-contained.
   Every prompt begins with an isolation declaration.
-  History is only the current user's current conversation.
-  Location, language, and skill context are explicitly declared.
+  History is only this person's current conversation.
+  Language, agent and (if known) regional context are explicitly declared.
   The LLM cannot be confused by a previous conversation because
   the previous conversation is not present.
 ```
@@ -113,8 +255,8 @@ Every LLM call from b2 follows this structure — without exception:
 │ of any previous conversation. Each request is self-contained.  │
 │                                                                 │
 │ [SKILL CONTEXT]                                                 │
-│ You are: {skill name and description}                           │
-│ Your role: {what this skill does}                               │
+│ You are: {agent name and description}                           │
+│ Your role: {what this agent does}                               │
 │ Tone: {from agent.yaml persona}                                 │
 │ Response length: {from agent.yaml}                              │
 │                                                                 │
@@ -135,7 +277,7 @@ Every LLM call from b2 follows this structure — without exception:
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ CONVERSATION — current session only, in-memory, never stored   │
+│ CONVERSATION — this person's current conversation only         │
 │                                                                 │
 │ [Turn 1]  user: {text}                                          │
 │ [Turn 1]  assistant: {text}                                     │
@@ -157,29 +299,55 @@ The system prompt is generated from scratch on every single call. It contains ev
 
 ---
 
-## What Makes b2 Different — Three Registries, Location-Aware Routing, LLM Isolation
+## What b2 Brings to Nonprofits
 
-### Agent Registry
-Every skill is registered with a semantic description embedding, language tags, a location scope, and tool dependencies. The skill router queries the agent registry on every message using intent × location × language simultaneously.
+Every nonprofit that wants an agent would otherwise have to build the same
+pieces: a WhatsApp integration, routing, guardrails, document checks, a way to
+hand work to staff. b2 builds them once and shares them.
 
-### Tool / MCP Registry
-Every tool is a reusable capability with a standard [MCP](https://modelcontextprotocol.io) interface. Built once, shared across all skills. Location-aware tools receive `LocationContext` automatically from the runtime.
+### Pretrained agents
+Agents for work many nonprofits share, built once and adapted per
+organization, starting with volunteer management. A nonprofit starts from a
+working agent and changes its instructions, tools and model in YAML. Some
+agents are built for one organization's process instead: GiveLight intake is
+GiveLight's alone, and its death-certificate checks and handoff are specific to
+GiveLight.
 
-### Location Registry
-Location context is detected per-session and used for routing and tool enrichment. Never stored. The location registry maintains country codes, regional groupings, and skill scope boundaries.
+### Orchestration
+One number, many agents. The router matches each conversation to the agent
+built for it, and a sticky agent keeps a case with the same agent from start to
+finish. Agents call shared tools and hand finished work to the nonprofit's own
+systems.
+
+### Guardrails and human oversight
+Agents should pass anything uncertain to a person, with the reasons, instead of
+deciding on their own. Today the GiveLight intake agent sends every case to
+GiveLight's reviewers marked accepted or needs-review, conversations expire
+after 72 hours, and the summary is written from a transcript scrubbed of phone
+numbers and emails. A guardrails layer that scrubs personal data from every
+model call is planned.
+
+### Any LLM
+Agents run through the LLM Gateway, so each one can use the model that fits
+the nonprofit's budget, privacy needs and languages, and switch later.
+
+### Shared tools
+Every tool is a reusable capability, built once and shared across agents. The
+target interface is [MCP](https://modelcontextprotocol.io).
 
 ```
-TOOL / MCP REGISTRY — built once, reused by everyone
+TOOL REGISTRY — built once, reused by every agent
 ────────────────────────────────────────────────────────
-web_search     ← farming · health · legal · education · ...
-weather        ← farming · health · disaster-response · ...
-rag            ← every skill with a knowledge base
-nearby_clinics ← health (location-aware)
-ocr            ← legal-aid · medical-bill · lending-lens · ...
-maps           ← farming (markets) · health (clinics) · ...
-calculator     ← lending-lens · delivery-optimizer · ...
-[your tool]    ← immediately available to every future skill
+pii_scrub             ← every agent
+summary               ← every agent (plain-language recap for the person)
+scheduling            ← volunteer management · appointments · ...
+rag                   ← every agent with a knowledge base
+[your tool]           ← immediately available to every future agent
 ```
+
+`pii_scrub` and `summary` exist today in `tools/`; the others are planned. A
+tool can also belong to one organization's agent: the death-certificate
+verification and GiveLight handoff tools serve only GiveLight intake.
 
 ---
 
@@ -197,7 +365,7 @@ calculator     ← lending-lens · delivery-optimizer · ...
 │                  AGENTIC OS CORE PLATFORM                        │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │                  NeMo Guardrails Layer                     │  │
+│  │                  Guardrails Layer                          │  │
 │  │   PII scrub · Content safety · Jailbreak detection         │  │
 │  │   Topic control · Fraud signals · Location scrub           │  │
 │  └───────────────────────────┬────────────────────────────────┘  │
@@ -213,13 +381,13 @@ calculator     ← lending-lens · delivery-optimizer · ...
 │  └───────────────────────────┬────────────────────────────────┘  │
 │                              │                                   │
 │  ┌──────────┬────────────────▼──────────┬─────────────────────┐  │
-│  │  AGENT   │     SKILL ROUTER          │   TOOL / MCP        │  │
+│  │  AGENT   │     ROUTER                │   TOOL / MCP        │  │
 │  │ REGISTRY │  Intent × Location ×      │   REGISTRY          │  │
 │  │          │  Language routing         │                     │  │
 │  └──────────┴────────────────┬──────────┴─────────────────────┘  │
 │                              │                                   │
 │  ┌───────────────────────────▼────────────────────────────────┐  │
-│  │                  Skill Agent Runtime                       │  │
+│  │                  Agent Runtime                             │  │
 │  │   Builds self-contained, isolated prompt                   │  │
 │  │   Injects tool results · In-session memory only            │  │
 │  └───────────────────────────┬────────────────────────────────┘  │
@@ -229,7 +397,7 @@ calculator     ← lending-lens · delivery-optimizer · ...
 │  │   Single b2 identity for all LLM calls                     │  │
 │  │   Isolation enforcement — strips all user signals          │  │
 │  │   Prompt validation — rejects non-compliant prompts        │  │
-│  │   Model routing — Gemini · GPT-4o · Claude · LLaMA         │  │
+│  │   Model routing — any LLM, chosen per agent                │  │
 │  │   Retry logic · Rate limiting · Cost tracking              │  │
 │  └───────────────────────────┬────────────────────────────────┘  │
 └──────────────────────────────┼───────────────────────────────────┘
@@ -237,52 +405,85 @@ calculator     ← lending-lens · delivery-optimizer · ...
 ┌──────────────────────────────▼───────────────────────────────────┐
 │                        MODEL LAYER                               │
 │         LLMAdapter interface — model-agnostic, swappable         │
-│      Gemini 1.5 Pro (MVP) · GPT-4o · Claude · LLaMA             │
+│           Gemini (live) · GPT · Claude · Llama · open models     │
 │   Every model sees: b2 · Every model sees: isolated context      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Defining a Skill Agent
+## Defining an Agent
+
+An agent is one YAML file in `agents/`. These are the fields the loader reads
+today (`src/orchestrator/agent.py`):
 
 ```yaml
-# agents/farming-kenya/agent.yaml
+# agents/my_agent.yaml
 
-name: Kenya Farming Agent
+name: my_agent
+description: >
+  The requests this agent should handle. The router compares each message with
+  the agent's name, description and system prompt, so describe the requests,
+  not the agent.
+
+sticky: false        # true: once a conversation reaches this agent, it stays
+
+system_prompt: |
+  How the agent should behave.
+
+tools:               # names from tools/*.yaml
+  - death_certificate_verification
+skills: []           # names from skills/*.yaml
+
+provider:
+  type: gemini
+  model: gemini-2.5-flash
+```
+
+### Planned format
+
+The target design adds languages, location scope, session settings, persona,
+safety rules and human escalation. The loader doesn't read these fields yet.
+The example is a volunteer management agent, the next one planned:
+
+```yaml
+# agents/volunteer-management/agent.yaml
+
+name: Volunteer Management Agent
 version: "1.0"
 description: >
-  Crop advice, pest identification, and market prices for
-  smallholder farmers in Kenya.
+  Volunteers asking about open shifts, signing up, changing or cancelling a
+  shift, or asking what to bring and where to go.
 
-languages: [sw, en]
+languages: [en, es, id]
 
 location_scope:
-  type: country
-  countries: [KE]
+  type: organization        # this nonprofit's sites only
 
 session:
-  timeout_minutes: 10       # per-skill — platform maximum is 4320 (72 hours)
-  max_turns: 8
-  auto_summary: true        # send plain-language summary to user at session end
-  summary_instructions: >   # optional — override default summary prompt
-    Summarize key findings, recommendations, and next steps.
-    5 bullets maximum. Plain language.
+  timeout_minutes: 60       # per agent — platform maximum is 4320 (72 hours)
+  max_turns: 20
+  auto_summary: true        # send a plain-language summary at session end
+  summary_instructions: >   # optional — override the default summary prompt
+    Confirm the shifts the volunteer signed up for or changed, with dates,
+    times and addresses. Plain language.
 
 persona:
-  tone: warm, practical, uses Kenyan farming examples
+  tone: warm, appreciative, practical
   response_length: concise
   voice_style: conversational, no jargon
-  location_aware: true
 
 tools:
-  - web_search
-  - weather
-  - rag:knowledge/
+  - scheduling
+  - rag:knowledge/          # the nonprofit's volunteer handbook
 
 safety:
-  never_advise: [pesticide_dosage_medical, financial_loans]
-  always_refer: local_agricultural_extension_officer
+  never_share: [other_volunteers_contact_details]
+  escalate_to_staff: [safeguarding_concerns, complaints, injuries]
+
+provider:                   # any LLM, through the LLM Gateway
+  type: gemini
+  model: gemini-2.5-flash
 
 channels: all
 owner: contributor:your-github-handle
@@ -292,33 +493,55 @@ owner: contributor:your-github-handle
 
 ## Defining a Tool
 
-```yaml
-# tools/weather/tool.yaml
+A tool is a YAML file in `tools/` that points at a Python function. The model
+sees the name, description and input schema:
 
-name: Weather Tool
-id: weather
+```yaml
+# tools/deathCertificatePipeline.yaml
+
+name: death_certificate_verification
+description: >
+  What the tool does and when the model should call it.
+input_schema:
+  type: object
+  properties: {}
+implementation:
+  type: function
+  needs_context: true     # the handler receives the conversation's context
+  handler: tools.death_certificate_pipeline.verify.verify_death_certificate
+```
+
+### Planned format
+
+The target design serves tools over MCP and injects location automatically:
+
+```yaml
+# tools/scheduling/tool.yaml
+
+name: Scheduling Tool
+id: scheduling
 version: "1.0"
-description: Current conditions, forecasts, and agricultural alerts.
+description: Finds open volunteer shifts and books, moves or cancels them.
 
 input_schema:
+  action:
+    type: string
+    enum: [find, book, move, cancel]
   location:
     type: object
     auto_inject: true           # runtime injects LocationContext automatically
     required: false
-  days_ahead:
-    type: integer
-    default: 1
+  date_range:
+    type: object
+    required: false
 
 output_schema:
-  temperature_c: number
-  humidity_percent: number
-  rainfall_mm: number
-  conditions: string
-  agricultural_alert: string | null
+  shifts: list                  # site, role, start, end, spots left
+  confirmation: string | null
 
-mcp_endpoint: tools/weather/server.py
+mcp_endpoint: tools/scheduling/server.py
 rate_limit: 100/minute
-auth: none
+auth: nonprofit                 # each nonprofit connects its own calendar or roster
 owner: contributor:your-github-handle
 ```
 
@@ -326,7 +549,11 @@ owner: contributor:your-github-handle
 
 ## Language Support
 
-Gemini 1.5 Pro understands and responds natively in 100+ languages. The intent classifier detects language from the message itself — no translation layer, no extra latency, no cost.
+The people nonprofits serve write in their own languages, and their documents
+come in many more. Agents reply in the language a person writes in, and
+GiveLight's certificate checks read certificates in Indonesian, Bengali, Urdu
+and other languages directly — no translation layer. Gemini, the model used today,
+supports 100+ languages:
 
 | Region | Languages |
 |--------|-----------|
@@ -336,81 +563,121 @@ Gemini 1.5 Pro understands and responds natively in 100+ languages. The intent c
 | South Asia | Hindi (hi), Bengali (bn), Urdu (ur), Gujarati (gu), Punjabi (pa) |
 | Southeast Asia | Indonesian (id), Filipino (fil), Vietnamese (vi), Khmer (km) |
 | Latin America | Spanish (es), Portuguese (pt), Haitian Creole (ht), Quechua (qu) |
-| + 80 more | All languages natively supported by Gemini 1.5 Pro |
+| + 80 more | All languages natively supported by Gemini |
 
 ---
 
 ## Privacy Principles
 
-These are not aspirations. They are architectural constraints enforced in code:
+The people nonprofits serve often share their most sensitive information: IDs,
+death certificates, family circumstances. These are the principles b2 is built
+to, and the target for every agent:
 
-- **No conversation content is ever stored beyond the active session.** Session memory is in-process only. Platform maximum is 72 hours — set per skill in `agent.yaml`. When a session ends, it is deleted with no archive and no recovery path.
-- **Users hold their own memory.** When a session closes, b2 automatically sends a plain-language summary to the user. The summary lives in their own WhatsApp chat — b2 does not keep it. If a user replies to that summary later, b2 reads it as context and continues the conversation. The user decides what to share. b2 never stores it.
-- **No PII is ever written.** Phone numbers are one-way hashed to session IDs on receipt. The raw identifier never leaves the channel adapter.
-- **No location is ever stored.** Location context lives in session memory only. Never written to logs, databases, or analytics.
-- **No user signal ever reaches the LLM.** All LLM calls flow through the b2 API Gateway. The model provider sees only b2 — never a user identity, session, or location.
-- **Every LLM call is fully isolated.** Prompts are constructed fresh for every call. No conversation from any other user, session, or channel is present. Cross-contamination is architecturally impossible.
-- **No user profiles.** b2 has no concept of a user across sessions.
-- **No tracking, no analytics, no behavioral data.** Usage counted anonymously — request counts only.
-- **NeMo Guardrails scrubs PII** — including precise location — from every message before it reaches any LLM or tool.
+- **People decide about people.** Agents gather, check and explain. Decisions
+  about a person's eligibility or case are made by the nonprofit's staff.
+- **Nothing is kept longer than the work needs.** Conversations expire, 72 hours
+  at most, set per agent. When a session ends, it is deleted with no archive and
+  no recovery path.
+- **The nonprofit's data stays with the nonprofit.** What an agent hands over
+  goes into the nonprofit's own systems. b2 can deliver work there but never
+  read it back.
+- **People hold their own memory.** At the end of a session, b2 sends a
+  plain-language summary to the person. It lives in their own chat. If they
+  reply to it later, b2 reads it as context and continues.
+- **No PII is written that doesn't have to be.** Phone numbers are one-way
+  hashed to session IDs on receipt, except where a nonprofit needs a way to
+  contact the person back.
+- **No location is ever stored.** Location context lives in session memory only.
+  Never written to logs, databases, or analytics.
+- **No beneficiary signal ever reaches the LLM.** All model calls flow through
+  the LLM Gateway. The model provider sees only b2 — never a person's identity,
+  session or location.
+- **Every LLM call is fully isolated.** Prompts are constructed fresh for every
+  call. No conversation from any other person, session or channel is present.
+- **No profiles, no tracking, no behavioral data.** Usage is counted
+  anonymously, as request counts only.
+- **Guardrails scrub PII**, including precise location, from every message
+  before it reaches any LLM or tool.
+
+### Where the current implementation differs
+
+- **Conversations are kept for up to 72 hours, in Firestore, not in memory.**
+  Cloud Run runs several instances, so a WhatsApp conversation has to survive
+  between them. Firestore holds each conversation's history, the agent handling
+  it, and the latest uploaded image. Records are keyed by the user's WhatsApp
+  number and expire 72 hours after the last message.
+- **Death certificates are passed to GiveLight by design.** Each case goes
+  through a staging bucket. It is deleted once GiveLight's script collects it,
+  or after 7 days.
+- **Phone numbers are not hashed yet.** Besides keying the Firestore records,
+  the number goes to GiveLight in each case so their team can contact the
+  family, and some log lines still include it.
+- **The summary is sent after a certificate is verified,** not at the end of a
+  session.
+- **Not built yet:** the guardrails layer, the LLM Gateway, location detection,
+  and the end-of-session summary. Model calls go from the adapter straight to
+  Gemini on Vertex AI, under the adapter's own service account.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Channels | Meta Cloud API, Twilio, Telegram Bot API | Widest reach, lowest friction |
-| Async pipeline | GCP Pub/Sub | Webhook returns 200 in <1s |
-| Guardrails | NVIDIA NeMo Guardrails | Open source, production-proven |
-| Tool protocol | Model Context Protocol (MCP) | Standard, composable, location-aware |
-| Location detection | Gemini inference + geocoding + phone prefix | Three-source fallback chain |
-| Geocoding | Google Maps Geocoding API | Place names → country/region |
-| LLM API Gateway | b2 custom (single identity, isolation enforcement) | Privacy + contamination prevention |
-| Intent + routing | b2 Agentic OS Core (custom) | Intent × location × language |
-| LLM (MVP) | Gemini 1.5 Pro via Vertex AI | 100+ languages, GCP-native |
-| LLM (adapters) | GPT-4o, Claude, LLaMA | Model-agnostic adapter interface |
-| Knowledge / RAG | Vertex AI Vector Search | Semantic retrieval |
-| Session state | In-memory only, max 72 hrs per skill | Privacy: nothing persists beyond TTL |
-| Compute | GCP Cloud Run | Serverless, scales to zero |
-| Language | Python 3.11 | FastAPI, async-first |
+| Layer | Technology | Status |
+|-------|-----------|--------|
+| Channels | Meta WhatsApp Cloud API | Live |
+| | Twilio (SMS), Telegram Bot API | Planned |
+| Async pipeline | Central webhook acknowledges Meta at once and processes in the background | Live |
+| | GCP Pub/Sub | Planned |
+| Agent framework | pydantic-ai | Live |
+| Intent + routing | Embedding similarity (Vertex AI `text-embedding-004`), sticky agents | Live |
+| | Intent × location × language routing | Planned |
+| LLM | Gemini 3.8 Flash and 2.5 Flash via Vertex AI | Live |
+| | Other providers (GPT, Claude, Llama, self-hosted open models) through the LLM Gateway | Planned |
+| Tools | YAML-defined Python functions | Live |
+| | Model Context Protocol (MCP) | Planned |
+| Session state | Firestore, 72-hour TTL | Live |
+| Partner handoff | Cloud Storage bucket + GiveLight's Apps Script | Live |
+| Compute | GCP Cloud Run, built by Cloud Build | Live |
+| Language | Python 3.12, FastAPI | Live |
+| Guardrails | NVIDIA NeMo Guardrails | Planned |
+| Location detection | Gemini inference + geocoding + phone prefix | Planned |
+| LLM API Gateway | b2 custom (single identity, isolation enforcement) | Planned |
+| Knowledge / RAG | Vertex AI Vector Search | Planned |
 
 ---
 
 ## Roadmap
 
-### MVP (Weeks 1–6) — One channel. Three registries. Location-aware. LLM-isolated. Real users.
+### Built
+- [x] WhatsApp channel through the central webhook, on Cloud Run (staging and
+      production)
+- [x] Router with sticky agents, and agents, tools and skills defined in YAML
+- [x] **GiveLight intake agent**: orphan-aid applications over WhatsApp,
+      death-certificate verification (fraud checks, story consistency,
+      scoring) and handoff to GiveLight's reviewers
+- [x] Firestore conversation state with a 72-hour expiry
+- [x] End-to-end test harness and a labelled test set of real and fake
+      certificates
 
-- [ ] `#1` Canonical message envelope (with LocationContext)
-- [ ] `#2` Agent registry + agent.yaml spec (with location_scope)
-- [ ] `#3` Tool / MCP registry + tool.yaml spec (with location parameter)
-- [ ] `#4` LLM adapter interface + Gemini 1.5 Pro implementation
-- [ ] `#5` LLM API Gateway (b2 identity, isolation enforcement, prompt validation)
-- [ ] `#6` Location detector (device · prompt inference · phone prefix)
-- [ ] `#7` Intent classifier + language detection
-- [ ] `#8` Skill router (intent × location × language)
-- [ ] `#9` WhatsApp channel adapter
-- [ ] `#10` Skill agent runtime (isolation-compliant prompt builder)
-- [ ] `#11` Core tool: RAG
-- [ ] `#12` Core tool: web_search
-- [ ] `#13` Farming skill agents (global + Kenya reference)
-- [ ] `#14` Pub/Sub async worker
-- [ ] `#15` Session manager (per-skill TTL up to 72hrs, auto-summary trigger on close)
-- [ ] `#16` NeMo Guardrails integration
-- [ ] `#17` Cloud Run deploy + GitHub Actions CI/CD
-- [ ] `#18` CONTRIBUTING.md + local dev guide
+### Next
+- [ ] **Volunteer management agent**: finding and booking shifts, reminders
+      and changes, questions answered from the nonprofit's own handbook
+- [ ] Onboarding a new nonprofit: its own WhatsApp number, credentials and
+      handoff destination, without code changes
+- [ ] LLM Gateway with adapters for other model providers, so any agent can
+      run on any LLM
+- [ ] Guardrails layer: PII scrubbing on every model call, content safety,
+      prompt-injection defense
+- [ ] End-of-session summaries for every agent
 
-### Phase 1 (Weeks 7–14)
-SMS · Telegram · Messenger · Health triage · Legal aid · Education · Location tools · GPT-4o adapter · Contributor SDK v1
-
-### Phase 2 (Weeks 15–22)
-Token optimizer · Claude + LLaMA adapters · PII pipeline · Fraud signals · Tool marketplace
-
-### Phase 3 (Weeks 23–34)
-PSTN voice · Streaming STT/TTS · b2 CLI · Contributor docs · Viber · LINE
-
-### Phase 4 (Month 9+)
-Multi-region · 500+ skills · 100+ tools · 1M+ users · Open source core
+### Later
+- [ ] A library of pretrained agents for work many nonprofits share (volunteer
+      management, FAQs, appointment reminders) that organizations adapt
+      instead of building
+- [ ] More channels: SMS, Telegram, voice
+- [ ] Tools over MCP, shared across agents and organizations
+- [ ] Location-aware routing and tools
+- [ ] A contributor guide and SDK for building new agents and tools
 
 ---
 
@@ -418,46 +685,44 @@ Multi-region · 500+ skills · 100+ tools · 1M+ users · Open source core
 
 ```
 b2-platform/
-├── app/
-│   ├── main.py
-│   ├── core/
-│   │   ├── envelope.py            # Canonical message + LocationContext
-│   │   ├── session.py             # Ephemeral session manager
-│   │   ├── safety.py              # NeMo Guardrails integration
-│   │   ├── worker.py              # Pub/Sub async processor
-│   │   └── config.py
-│   ├── intelligence/
-│   │   ├── location.py            # Location detector
-│   │   ├── classifier.py          # Intent + language classifier
-│   │   ├── router.py              # Skill router
-│   │   ├── runtime.py             # Skill agent runtime (prompt builder)
-│   │   ├── gateway.py             # LLM API Gateway (NEW)
-│   │   └── adapters/
-│   │       ├── base.py            # LLMAdapter interface
-│   │       ├── gemini.py          # Gemini 1.5 Pro (MVP)
-│   │       ├── gpt4o.py           # Phase 1
-│   │       └── claude.py          # Phase 1
-│   ├── registries/
-│   │   ├── agent_registry.py
-│   │   ├── tool_registry.py
-│   │   └── location_registry.py
-│   └── channels/
-│       ├── base.py
-│       ├── whatsapp/
-│       ├── sms/
-│       └── telegram/
+├── src/
+│   ├── api.py                     # FastAPI app: POST /message, GET /health
+│   ├── chat.py                    # One conversation turn: route, run, save
+│   ├── router.py                  # Picks the agent for a message
+│   ├── embeddings.py              # Vertex AI embeddings for routing
+│   ├── store.py                   # SQLite index of agent embeddings
+│   ├── session_store.py           # Firestore history + latest image, 72-hour TTL
+│   ├── orchestrator/              # Agent, tool and skill loading
+│   ├── whatsapp_media.py          # Downloads inbound media from Meta
+│   ├── whatsapp_outbound.py       # Sends extra WhatsApp messages
+│   ├── summary_response.py        # Optional summary message after a verification
+│   ├── envelope.py                # Canonical message types
+│   ├── config/whatsapp.yaml       # WhatsApp channel settings
+│   └── main.py                    # Terminal chat for local testing
 ├── agents/
-│   ├── farming-global/
-│   └── farming-kenya/
+│   ├── whatsapp_agent.yaml
+│   ├── poc_deathCertParserAgent.yaml
+│   └── examples/                  # Templates, not routed
 ├── tools/
-│   ├── rag/
-│   └── web_search/
+│   ├── deathCertificatePipeline.yaml
+│   ├── death_certificate_pipeline/  # Verification, scoring and GiveLight handoff
+│   ├── fake_image_detector/         # Authenticity checks
+│   ├── privacy/                     # PII scrubber
+│   └── summary/
+├── skills/                        # Prompt snippets agents can include
+├── integrations/
+│   └── givelight-drive-automation/  # GiveLight's Apps Script
+├── e2e/                           # e2e harness
+├── e2e_cases/                     # e2e cases (real cases are not checked in)
+├── scripts/                       # e2e runner, Cloud Run config check
+├── poc/                           # Earlier standalone scoring API
+├── app/core/                      # Re-exports kept for older imports
 ├── tests/
-│   └── scripts/
+├── docs/
+├── deploy/cloud_run_config.json   # Required Cloud Run env and secrets
+├── cloudbuild.yaml
 ├── Dockerfile
-├── requirements.txt
-├── CONTRIBUTING.md
-└── README.md
+└── requirements.txt
 ```
 
 ---
@@ -588,18 +853,65 @@ certificate without a media ID fails the remote case with an `UNKNOWN` result.
 
 Do not commit real certificates or real-person narratives as e2e fixtures.
 
+### Latest results
+
+Run on 2026-10-31, locally with `--debug-tools`, on the code in
+[#60](https://github.com/benevolentbandwidth/b2-platform/pull/60) (scoring
+config v8, detector config v9, Gemini 3.8 Flash). The case set itself is not
+checked in.
+
+| Group | Correct | |
+|---|---|---|
+| Indonesia real | 7 / 7 | accepted |
+| Bangladesh real | 7 / 8 | accepted |
+| Pakistan real | 6 / 8 | accepted |
+| Indonesia fake | 29 / 29 | caught |
+| Bangladesh fake | 8 / 8 | caught |
+| Pakistan fake | 8 / 8 | caught |
+| Moroccan fake | 4 / 9 | caught |
+| **Real** | **20 / 23 (87%)** | accepted |
+| **Fake** | **49 / 54 (91%)** | caught |
+| **Overall** | **69 / 77 (90%)** | |
+
+How to read these numbers:
+
+- **The fakes vary a lot in difficulty.** The Pakistan fakes are synthetic and
+  print "SYNTHETIC TEST DATA — NOT A VALID CERTIFICATE" on the page, so they
+  measure little; without them, 41 of 46 fakes (89%) were caught. The
+  Indonesian fakes combine headers and stamps from different villages. The
+  Bangladesh fakes are real certificates with the handwriting replaced by
+  typed text.
+- **Realistic edits are the weak spot.** The Moroccan fakes are one real scan
+  with only the handwritten fields changed. Five of the nine (002, 005, 006,
+  009, 010) were accepted, rated clean at a fraud risk of 0.10–0.15, as in
+  every earlier run.
+- **Real certificates sent to review:** Pakistan 002 and 006, flagged as forged
+  over handwritten annotations on every run so far, and Bangladesh 001, which
+  passed on the previous run (the fraud check varies between runs).
+- A case counts as caught when it is not accepted, whether it is sent to review
+  or rejected.
+
+Each group was run with:
+
+```bash
+python scripts/e2e_cases.py --debug-tools --country <country> --kind <real|fake>
+```
+
 ---
 
 ## Contributing
 
-We are actively looking for contributors to own MVP components.
+We are looking for contributors to build platform components and new agents
+for nonprofits.
 
-1. Read [CONTRIBUTING.md](CONTRIBUTING.md)
-2. Browse [open issues](https://github.com/benevolentbandwidth/b2-platform/issues)
-3. Comment to claim an issue
-4. Build, test, PR
+1. Browse [open issues](https://github.com/benevolentbandwidth/b2-platform/issues)
+2. Comment to claim an issue
+3. Build, test, PR
 
-**The deal:** You build the component. The foundation provides infrastructure, code review, and deployment. Your work serves millions of people — in their language, in their location, on their device, with their privacy intact.
+**The deal:** You build the component. The foundation provides infrastructure,
+code review, and deployment. Your work goes straight to nonprofits and the
+people they serve — in their language, on the channels they already use, with
+their privacy intact.
 
 ---
 
@@ -612,7 +924,6 @@ MIT License. See [LICENSE](LICENSE) for details.
 ## Links
 
 - [Benevolent Bandwidth Foundation](https://benevolentbandwidth.org)
-- [Contributing Guide](CONTRIBUTING.md)
 - [Open Issues](https://github.com/benevolentbandwidth/b2-platform/issues)
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [NVIDIA NeMo Guardrails](https://github.com/NVIDIA-NeMo/Guardrails)
@@ -621,5 +932,5 @@ MIT License. See [LICENSE](LICENSE) for details.
 ---
 
 *Built with purpose by the Benevolent Bandwidth Foundation.*
-*Every tool built serves every skill. Every skill serves everyone.*
-*Every location matters. Every conversation is private. Every person is just b2.*
+*Every tool built serves every agent. Every agent serves a nonprofit's mission.*
+*Every conversation is private. Every decision about a person is made by a person.*
